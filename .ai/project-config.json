@@ -1,0 +1,42 @@
+{
+  "projectType": "fullstack-web-app",
+  "languages": ["rust", "javascript", "html", "css"],
+  "frameworks": {
+    "backend": "actix-web",
+    "frontend": "vanilla-js"
+  },
+  "codeStyle": {
+    "rust": {
+      "formatter": "rustfmt",
+      "linter": "clippy",
+      "edition": "2021"
+    },
+    "javascript": {
+      "style": "modern-es6",
+      "modules": "es6",
+      "async": "async-await"
+    }
+  },
+  "preferences": {
+    "errorHandling": "explicit",
+    "documentation": "required-for-public-apis",
+    "testing": "unit-and-integration",
+    "security": "input-validation-required"
+  },
+  "aiInstructions": {
+    "codeGeneration": [
+      "Always include error handling",
+      "Use async/await for asynchronous operations",
+      "Follow the established project structure",
+      "Include basic documentation for new functions",
+      "Suggest improvements for performance and security"
+    ],
+    "reviewFocus": [
+      "Security vulnerabilities",
+      "Performance bottlenecks",
+      "Code maintainability",
+      "Test coverage",
+      "Documentation quality"
+    ]
+  }
+}
