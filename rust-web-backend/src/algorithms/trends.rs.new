@@ -1,0 +1,254 @@
+use crate::models::Doctor;
+use super::AlgorithmConfig;
+
+/// 数据趋势分析器
+pub struct DataTrendAnalyzer {
+    config: AlgorithmConfig,
+}
+
+impl DataTrendAnalyzer {
+    /// 创建新的数据趋势分析器
+    pub fn new(config: AlgorithmConfig) -> Self {
+        Self { config }
+    }
+
+    /// 计算数据趋势指数
+    /// 
+    /// 根据文档公式：趋势指数 = 7日趋势 × 0.5 + 15日趋势 × 0.3 + 30日趋势 × 0.2
+    pub fn calculate_trend_index(&self, doctor: &Doctor) -> f64 {
+        let trend_7d = self.calculate_period_trend(
+            doctor.followers_7d, doctor.likes_7d, doctor.works_7d, 7
+        );
+        let trend_15d = self.calculate_period_trend(
+            doctor.followers_15d, doctor.likes_15d, doctor.works_15d, 15
+        );
+        let trend_30d = self.calculate_period_trend(
+            doctor.followers_30d, doctor.likes_30d, doctor.works_30d, 30
+        );
+
+        let weighted_trend = 
+            trend_7d * self.config.trend_7d_weight as f64 +
+            trend_15d * self.config.trend_15d_weight as f64 +
+            trend_30d * self.config.trend_30d_weight as f64;
+
+        (weighted_trend * 100.0).max(0.0).min(100.0)
+    }
+
+    /// 计算指定周期的趋势分数
+    fn calculate_period_trend(&self, followers: i32, likes: i32, works: i32, days: i32) -> f64 {
+        if days <= 0 || works <= 0 {
+            return 0.0;
+        }
+
+        // 计算日均数据
+        let daily_followers = followers as f64 / days as f64;
+        let daily_likes = likes as f64 / days as f64;
+        let daily_works = works as f64 / days as f64;
+
+        // 计算增长率 (与行业平均值比较)
+        let follower_growth = self.calculate_growth_score(daily_followers, 100.0); // 假设行业日均涨粉100
+        let engagement_growth = self.calculate_growth_score(daily_likes, 1000.0); // 假设行业日均点赞1000
+        let content_growth = self.calculate_growth_score(daily_works, 0.5); // 假设行业日均发布0.5个作品
+
+        // 加权平均
+        (follower_growth * 0.4 + engagement_growth * 0.4 + content_growth * 0.2).max(0.0).min(1.0)
+    }
+
+    /// 计算增长分数
+    fn calculate_growth_score(&self, actual: f64, benchmark: f64) -> f64 {
+        if benchmark <= 0.0 {
+            return 0.5; // 无基准数据时返回中性分数
+        }
+
+        let ratio = actual / benchmark;
+        match ratio {
+            r if r >= 2.0 => 1.0,      // 超过基准2倍，满分
+            r if r >= 1.5 => 0.9,     // 超过基准1.5倍
+            r if r >= 1.2 => 0.8,     // 超过基准1.2倍
+            r if r >= 1.0 => 0.7,     // 达到基准
+            r if r >= 0.8 => 0.6,     // 基准的80%
+            r if r >= 0.6 => 0.5,     // 基准的60%
+            r if r >= 0.4 => 0.4,     // 基准的40%
+            r if r >= 0.2 => 0.3,     // 基准的20%
+            _ => 0.2,                  // 低于基准20%
+        }
+    }
+
+    /// 分析趋势变化
+    pub fn analyze_trend_changes(&self, doctor: &Doctor) -> TrendAnalysisReport {
+        let trend_7d = self.calculate_period_trend(
+            doctor.followers_7d, doctor.likes_7d, doctor.works_7d, 7
+        );
+        let trend_15d = self.calculate_period_trend(
+            doctor.followers_15d, doctor.likes_15d, doctor.works_15d, 15
+        );
+        let trend_30d = self.calculate_period_trend(
+            doctor.followers_30d, doctor.likes_30d, doctor.works_30d, 30
+        );
+
+        let overall_trend = self.calculate_trend_index(doctor);
+        
+        // 判断趋势方向
+        let trend_direction = if trend_7d > trend_15d && trend_15d > trend_30d {
+            TrendDirection::Rising
+        } else if trend_7d < trend_15d && trend_15d < trend_30d {
+            TrendDirection::Declining
+        } else {
+            TrendDirection::Stable
+        };
+
+        // 计算波动性
+        let volatility = self.calculate_volatility(&[trend_7d, trend_15d, trend_30d]);
+
+        TrendAnalysisReport {
+            overall_index: overall_trend,
+            trend_7d,
+            trend_15d,
+            trend_30d,
+            trend_direction,
+            volatility,
+            recommendation: self.get_trend_recommendation(overall_trend, &trend_direction),
+        }
+    }
+
+    /// 计算数据波动性
+    fn calculate_volatility(&self, values: &[f64]) -> f64 {
+        if values.len() < 2 {
+            return 0.0;
+        }
+
+        let mean = values.iter().sum::<f64>() / values.len() as f64;
+        let variance = values.iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>() / values.len() as f64;
+        
+        variance.sqrt()
+    }
+
+    /// 获取趋势投放建议
+    fn get_trend_recommendation(&self, overall_index: f64, direction: &TrendDirection) -> String {
+        match (overall_index, direction) {
+            (score, TrendDirection::Rising) if score >= 80.0 => {
+                "数据呈上升趋势，建议增加投放预算，抓住增长机会".to_string()
+            },
+            (score, TrendDirection::Rising) if score >= 60.0 => {
+                "数据稳步上升，建议保持现有投放力度并持续观察".to_string()
+            },
+            (score, TrendDirection::Stable) if score >= 70.0 => {
+                "数据表现稳定，适合长期合作，建议维持投放".to_string()
+            },
+            (score, TrendDirection::Declining) if score >= 60.0 => {
+                "数据略有下降，建议观察一段时间再决定投放策略".to_string()
+            },
+            (_, TrendDirection::Declining) => {
+                "数据持续下降，建议暂缓投放或降低投放预算".to_string()
+            },
+            _ => {
+                "数据表现一般，建议根据其他指标综合评估".to_string()
+            }
+        }
+    }
+
+    /// 批量计算趋势指数
+    pub fn calculate_batch_trends(&self, doctors: &[Doctor]) -> Vec<(i32, f64)> {
+        doctors.iter()
+            .map(|doctor| (doctor.id, self.calculate_trend_index(doctor)))
+            .collect()
+    }
+}
+
+/// 趋势方向枚举
+#[derive(Debug, Clone, PartialEq)]
+pub enum TrendDirection {
+    Rising,    // 上升
+    Stable,    // 稳定
+    Declining, // 下降
+}
+
+impl std::fmt::Display for TrendDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrendDirection::Rising => write!(f, "上升"),
+            TrendDirection::Stable => write!(f, "稳定"),
+            TrendDirection::Declining => write!(f, "下降"),
+        }
+    }
+}
+
+/// 趋势分析报告
+#[derive(Debug, Clone)]
+pub struct TrendAnalysisReport {
+    pub overall_index: f64,
+    pub trend_7d: f64,
+    pub trend_15d: f64,
+    pub trend_30d: f64,
+    pub trend_direction: TrendDirection,
+    pub volatility: f64,
+    pub recommendation: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Doctor;
+
+    fn create_test_doctor() -> Doctor {
+        Doctor {
+            id: 1,
+            name: "测试医生".to_string(),
+            fans_count: 100000,
+            followers_7d: 700,
+            followers_15d: 1400,
+            followers_30d: 2800,
+            likes_7d: 7000,
+            likes_15d: 14000,
+            likes_30d: 28000,
+            works_7d: 3,
+            works_15d: 7,
+            works_30d: 15,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_trend_index_calculation() {
+        let config = AlgorithmConfig::default();
+        let analyzer = DataTrendAnalyzer::new(config);
+        
+        let doctor = create_test_doctor();
+        let trend_index = analyzer.calculate_trend_index(&doctor);
+        
+        assert!(trend_index >= 0.0);
+        assert!(trend_index <= 100.0);
+    }
+
+    #[test]
+    fn test_period_trend_calculation() {
+        let config = AlgorithmConfig::default();
+        let analyzer = DataTrendAnalyzer::new(config);
+        
+        let trend = analyzer.calculate_period_trend(700, 7000, 3, 7);
+        assert!(trend >= 0.0 && trend <= 1.0);
+    }
+
+    #[test]
+    fn test_trend_analysis() {
+        let config = AlgorithmConfig::default();
+        let analyzer = DataTrendAnalyzer::new(config);
+        
+        let doctor = create_test_doctor();
+        let report = analyzer.analyze_trend_changes(&doctor);
+        
+        assert!(report.overall_index >= 0.0);
+        assert!(!report.recommendation.is_empty());
+    }
+
+    #[test]
+    fn test_volatility_calculation() {
+        let config = AlgorithmConfig::default();
+        let analyzer = DataTrendAnalyzer::new(config);
+        
+        let volatility = analyzer.calculate_volatility(&[0.8, 0.7, 0.9]);
+        assert!(volatility >= 0.0);
+    }
+}

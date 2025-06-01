@@ -4,3 +4,5 @@
 pub mod doctors;
 pub mod scores;
 pub mod weights;
+pub mod import;
+pub mod reports;

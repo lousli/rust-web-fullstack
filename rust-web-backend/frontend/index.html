@@ -3,21 +3,389 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医生数据分析系统</title>
+    <title>医生投放分析系统</title>
     <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js">
 </head>
 <body>
-    <div class="container">
-        <!-- 头部导航 -->
-        <header class="header">
-            <div class="header-content">
-                <h1><i class="fas fa-user-md"></i> 医生数据分析系统</h1>
-                <nav class="nav-tabs">
-                    <button class="nav-tab active" data-tab="doctors">
-                        <i class="fas fa-users"></i> 医生信息
+    <div class="app-container">
+        <!-- 侧边栏导航 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-user-md"></i>
+                    <span>医生投放分析</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>数据面板</span>
+                </a>
+                <a href="#doctors" class="nav-item" data-view="doctors">
+                    <i class="fas fa-user-doctor"></i>
+                    <span>医生管理</span>
+                </a>
+                <a href="#scoring" class="nav-item" data-view="scoring">
+                    <i class="fas fa-calculator"></i>
+                    <span>评分分析</span>
+                </a>
+                <a href="#weights" class="nav-item" data-view="weights">
+                    <i class="fas fa-sliders-h"></i>
+                    <span>权重配置</span>
+                </a>
+                <a href="#import" class="nav-item" data-view="import">
+                    <i class="fas fa-upload"></i>
+                    <span>数据导入</span>
+                </a>
+                <a href="#reports" class="nav-item" data-view="reports">
+                    <i class="fas fa-chart-line"></i>
+                    <span>分析报告</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <header class="main-header">
+                <div class="header-left">
+                    <h1 id="page-title">数据面板</h1>
+                    <p class="page-subtitle">医生投放数据分析与决策支持</p>
+                </div>
+                <div class="header-right">
+                    <button class="btn btn-primary" id="refresh-btn">
+                        <i class="fas fa-sync-alt"></i>
+                        刷新数据
                     </button>
-                    <button class="nav-tab" data-tab="analysis">
+                </div>
+            </header>
+
+            <!-- 数据面板视图 -->
+            <div id="dashboard-view" class="view-content active">
+                <div class="dashboard-grid">
+                    <!-- 统计卡片 -->
+                    <div class="stats-cards">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-user-doctor"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="total-doctors">--</h3>
+                                <p>医生总数</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-star"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="avg-score">--</h3>
+                                <p>平均评分</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-trophy"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="top-doctors">--</h3>
+                                <p>推荐医生</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-up"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="investment-rate">--</h3>
+                                <p>投放建议率</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 图表区域 -->
+                    <div class="chart-section">
+                        <div class="chart-card">
+                            <h3>评分分布</h3>
+                            <canvas id="scoreDistributionChart"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <h3>投放建议分布</h3>
+                            <canvas id="recommendationChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 排行榜 -->
+                    <div class="ranking-section">
+                        <div class="section-header">
+                            <h3>医生排行榜</h3>
+                            <select id="ranking-type">
+                                <option value="total_score">综合评分</option>
+                                <option value="influence_score">影响力</option>
+                                <option value="quality_score">内容质量</option>
+                                <option value="activity_score">活跃度</option>
+                            </select>
+                        </div>
+                        <div class="ranking-list" id="ranking-list">
+                            <!-- 动态生成排行榜内容 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 医生管理视图 -->
+            <div id="doctors-view" class="view-content">
+                <div class="view-header">
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="doctor-search" placeholder="搜索医生姓名、科室或职称...">
+                    </div>
+                    <div class="view-actions">
+                        <button class="btn btn-secondary" id="add-doctor-btn">
+                            <i class="fas fa-plus"></i>
+                            添加医生
+                        </button>
+                        <button class="btn btn-secondary" id="export-doctors-btn">
+                            <i class="fas fa-download"></i>
+                            导出数据
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="doctors-table">
+                        <thead>
+                            <tr>
+                                <th>医生姓名</th>
+                                <th>科室</th>
+                                <th>职称</th>
+                                <th>粉丝数</th>
+                                <th>内容数量</th>
+                                <th>评分</th>
+                                <th>投放建议</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="doctors-table-body">
+                            <!-- 动态生成表格内容 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 评分分析视图 -->
+            <div id="scoring-view" class="view-content">
+                <div class="scoring-controls">
+                    <div class="control-group">
+                        <label>选择医生对比</label>
+                        <select id="compare-doctors" multiple>
+                            <!-- 动态生成选项 -->
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <button class="btn btn-primary" id="compare-btn">
+                            <i class="fas fa-balance-scale"></i>
+                            开始对比
+                        </button>
+                        <button class="btn btn-secondary" id="recalculate-scores-btn">
+                            <i class="fas fa-calculator"></i>
+                            重新计算评分
+                        </button>
+                    </div>
+                </div>
+                <div class="comparison-results" id="comparison-results">
+                    <!-- 对比结果图表 -->
+                </div>
+            </div>
+
+            <!-- 权重配置视图 -->
+            <div id="weights-view" class="view-content">
+                <div class="weights-section">
+                    <div class="current-config">
+                        <h3>当前激活配置</h3>
+                        <div id="current-weight-config" class="weight-card">
+                            <!-- 当前配置内容 -->
+                        </div>
+                    </div>
+                    <div class="config-editor">
+                        <h3>创建新配置</h3>
+                        <form id="weight-config-form">
+                            <div class="form-group">
+                                <label for="config-name">配置名称</label>
+                                <input type="text" id="config-name" required>
+                            </div>
+                            <div class="weights-grid">
+                                <div class="weight-input">
+                                    <label for="cost-performance-weight">性价比权重 (%)</label>
+                                    <input type="number" id="cost-performance-weight" min="0" max="100" step="0.01" value="16.67">
+                                </div>
+                                <div class="weight-input">
+                                    <label for="data-index-weight">数据指标权重 (%)</label>
+                                    <input type="number" id="data-index-weight" min="0" max="100" step="0.01" value="16.67">
+                                </div>
+                                <div class="weight-input">
+                                    <label for="performance-weight">表现力权重 (%)</label>
+                                    <input type="number" id="performance-weight" min="0" max="100" step="0.01" value="16.67">
+                                </div>
+                                <div class="weight-input">
+                                    <label for="affinity-weight">亲和力权重 (%)</label>
+                                    <input type="number" id="affinity-weight" min="0" max="100" step="0.01" value="16.67">
+                                </div>
+                                <div class="weight-input">
+                                    <label for="editing-weight">剪辑权重 (%)</label>
+                                    <input type="number" id="editing-weight" min="0" max="100" step="0.01" value="16.66">
+                                </div>
+                                <div class="weight-input">
+                                    <label for="video-quality-weight">视频质量权重 (%)</label>
+                                    <input type="number" id="video-quality-weight" min="0" max="100" step="0.01" value="16.66">
+                                </div>
+                            </div>
+                            <div class="weight-total">
+                                <span>总权重: <span id="total-weight">100.00</span>%</span>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" id="validate-weights-btn">
+                                    <i class="fas fa-check"></i>
+                                    验证配置
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i>
+                                    保存配置
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="config-list">
+                        <h3>历史配置</h3>
+                        <div id="weight-configs-list">
+                            <!-- 配置列表 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据导入视图 -->
+            <div id="import-view" class="view-content">
+                <div class="import-section">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-content">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <h3>导入医生数据</h3>
+                            <p>支持 CSV 格式文件，请确保数据格式正确</p>
+                            <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+                            <button class="btn btn-primary" id="select-file-btn">
+                                <i class="fas fa-file-csv"></i>
+                                选择文件
+                            </button>
+                        </div>
+                    </div>
+                    <div class="import-template">
+                        <h3>CSV 模板格式</h3>
+                        <div class="template-info">
+                            <p>请确保您的 CSV 文件包含以下列（可使用中文列名）：</p>
+                            <div class="template-columns">
+                                <span class="column-tag">医生姓名</span>
+                                <span class="column-tag">科室</span>
+                                <span class="column-tag">职称</span>
+                                <span class="column-tag">粉丝数</span>
+                                <span class="column-tag">内容数量</span>
+                                <span class="column-tag">平均播放量</span>
+                                <span class="column-tag">点赞率</span>
+                                <span class="column-tag">评论率</span>
+                                <span class="column-tag">分享率</span>
+                                <span class="column-tag">性价比</span>
+                                <span class="column-tag">数据指标</span>
+                                <span class="column-tag">表现力</span>
+                                <span class="column-tag">亲和力</span>
+                                <span class="column-tag">剪辑</span>
+                                <span class="column-tag">视频质量</span>
+                            </div>
+                            <button class="btn btn-secondary" id="download-template-btn">
+                                <i class="fas fa-download"></i>
+                                下载模板
+                            </button>
+                        </div>
+                    </div>
+                    <div class="import-results" id="import-results" style="display: none;">
+                        <h3>导入结果</h3>
+                        <div id="import-summary"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分析报告视图 -->
+            <div id="reports-view" class="view-content">
+                <div class="reports-section">
+                    <div class="report-filters">
+                        <div class="filter-group">
+                            <label>报告类型</label>
+                            <select id="report-type">
+                                <option value="overall">综合分析报告</option>
+                                <option value="ranking">排名分析报告</option>
+                                <option value="trends">趋势分析报告</option>
+                                <option value="recommendations">投放建议报告</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>时间范围</label>
+                            <select id="time-range">
+                                <option value="current">当前数据</option>
+                                <option value="week">最近一周</option>
+                                <option value="month">最近一月</option>
+                                <option value="quarter">最近三月</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="generate-report-btn">
+                            <i class="fas fa-chart-bar"></i>
+                            生成报告
+                        </button>
+                    </div>
+                    <div class="report-content" id="report-content">
+                        <!-- 动态生成报告内容 -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 模态框 -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">标题</h3>
+                <button class="modal-close" id="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- 动态内容 -->
+            </div>
+            <div class="modal-footer" id="modal-footer">
+                <!-- 动态按钮 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载指示器 -->
+    <div id="loading-indicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <!-- 消息提示 -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- 引入 Chart.js 和应用脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="scripts/app.js"></script>
+    <script src="scripts/dashboard.js"></script>
+    <script src="scripts/doctors.js"></script>
+    <script src="scripts/scoring.js"></script>
+    <script src="scripts/weights.js"></script>
+    <script src="scripts/import.js"></script>
+    <script src="scripts/reports.js"></script>
+</body>
+</html>
                         <i class="fas fa-chart-bar"></i> 数据分析
                     </button>
                     <button class="nav-tab" data-tab="weights">

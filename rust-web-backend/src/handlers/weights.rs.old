@@ -1,0 +1,188 @@
+use actix_web::{web, HttpResponse, Result};
+use sqlx::SqlitePool;
+use crate::models::{WeightConfig, ApiResponse};
+
+/// 获取权重配置列表
+pub async fn get_weight_configs(pool: web::Data<SqlitePool>) -> Result<HttpResponse> {
+    match sqlx::query_as!(
+        WeightConfig,
+        "SELECT * FROM weight_configs ORDER BY created_at DESC"
+    )
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(configs) => Ok(HttpResponse::Ok().json(ApiResponse::success(configs))),
+        Err(e) => {
+            eprintln!("数据库查询错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("获取权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 获取当前激活的权重配置
+pub async fn get_active_weight_config(pool: web::Data<SqlitePool>) -> Result<HttpResponse> {
+    match sqlx::query_as!(
+        WeightConfig,
+        "SELECT * FROM weight_configs WHERE is_active = 1 LIMIT 1"
+    )
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(Some(config)) => Ok(HttpResponse::Ok().json(ApiResponse::success(config))),
+        Ok(None) => Ok(HttpResponse::NotFound().json(
+            ApiResponse::<()>::error("未找到激活的权重配置".to_string())
+        )),
+        Err(e) => {
+            eprintln!("数据库查询错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("获取激活权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 创建权重配置请求结构
+#[derive(serde::Deserialize)]
+pub struct CreateWeightConfigRequest {
+    pub config_name: String,
+    pub cost_performance_weight: f64,
+    pub data_index_weight: f64,
+    pub performance_weight: f64,
+    pub affinity_weight: f64,
+    pub editing_weight: f64,
+    pub video_quality_weight: f64,
+}
+
+/// 创建权重配置
+pub async fn create_weight_config(
+    pool: web::Data<SqlitePool>,
+    config: web::Json<CreateWeightConfigRequest>
+) -> Result<HttpResponse> {
+    // 验证权重总和是否为100
+    let total_weight = config.cost_performance_weight + 
+                      config.data_index_weight + 
+                      config.performance_weight + 
+                      config.affinity_weight + 
+                      config.editing_weight + 
+                      config.video_quality_weight;
+    
+    if (total_weight - 100.0).abs() > 0.01 {
+        return Ok(HttpResponse::BadRequest().json(
+            ApiResponse::<()>::error(format!("权重总和必须为100%，当前为{:.2}%", total_weight))
+        ));
+    }
+
+    match sqlx::query!(
+        r#"
+        INSERT INTO weight_configs 
+        (config_name, cost_performance_weight, data_index_weight, performance_weight, 
+         affinity_weight, editing_weight, video_quality_weight, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+        "#,
+        config.config_name,
+        config.cost_performance_weight,
+        config.data_index_weight,
+        config.performance_weight,
+        config.affinity_weight,
+        config.editing_weight,
+        config.video_quality_weight
+    )
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(result) => {
+            let new_id = result.last_insert_rowid();
+            let message = format!("权重配置创建成功，ID: {}", new_id);
+            Ok(HttpResponse::Created().json(ApiResponse::success(message)))
+        },
+        Err(e) => {
+            eprintln!("创建权重配置错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("创建权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 激活权重配置
+pub async fn activate_weight_config(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<i64>
+) -> Result<HttpResponse> {
+    let config_id = path.into_inner();
+    
+    // 开始事务：先将所有配置设为非激活，然后激活指定配置
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            eprintln!("开始事务失败: {}", e);
+            return Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("激活权重配置失败".to_string())
+            ));
+        }
+    };
+
+    // 将所有配置设为非激活
+    if let Err(e) = sqlx::query!("UPDATE weight_configs SET is_active = 0")
+        .execute(&mut *tx)
+        .await 
+    {
+        eprintln!("更新配置状态失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(
+            ApiResponse::<()>::error("激活权重配置失败".to_string())
+        ));
+    }
+
+    // 激活指定配置
+    let result = sqlx::query!("UPDATE weight_configs SET is_active = 1 WHERE id = ?", config_id)
+        .execute(&mut *tx)
+        .await;
+
+    match result {
+        Ok(query_result) => {
+            if query_result.rows_affected() == 0 {
+                return Ok(HttpResponse::NotFound().json(
+                    ApiResponse::<()>::error("权重配置不存在".to_string())
+                ));
+            }
+            
+            if let Err(e) = tx.commit().await {
+                eprintln!("提交事务失败: {}", e);
+                return Ok(HttpResponse::InternalServerError().json(
+                    ApiResponse::<()>::error("激活权重配置失败".to_string())
+                ));
+            }
+
+            let message = format!("权重配置 {} 已激活", config_id);
+            Ok(HttpResponse::Ok().json(ApiResponse::success(message)))
+        },
+        Err(e) => {
+            eprintln!("激活权重配置错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("激活权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 验证权重配置
+pub async fn validate_weight_config(config: web::Json<CreateWeightConfigRequest>) -> Result<HttpResponse> {
+    let total_weight = config.cost_performance_weight + 
+                      config.data_index_weight + 
+                      config.performance_weight + 
+                      config.affinity_weight + 
+                      config.editing_weight + 
+                      config.video_quality_weight;
+    
+    let is_valid = (total_weight - 100.0).abs() <= 0.01;
+    
+    let result = serde_json::json!({
+        "is_valid": is_valid,
+        "total_weight": total_weight,
+        "message": if is_valid { "权重配置有效" } else { "权重总和必须为100%" }
+    });
+    
+    Ok(HttpResponse::Ok().json(ApiResponse::success(result)))
+}

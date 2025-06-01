@@ -1,0 +1,340 @@
+use actix_web::{web, HttpResponse, Result};
+use sqlx::SqlitePool;
+use crate::models::{WeightConfig, ApiResponse};
+
+/// 获取权重配置列表
+pub async fn get_weight_configs(pool: web::Data<SqlitePool>) -> Result<HttpResponse> {
+    match sqlx::query_as::<_, WeightConfig>("SELECT * FROM weight_configs ORDER BY created_at DESC")
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(configs) => Ok(HttpResponse::Ok().json(ApiResponse::success(configs))),
+        Err(e) => {
+            eprintln!("数据库查询错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("获取权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 获取默认权重配置
+pub async fn get_default_weight_config(pool: web::Data<SqlitePool>) -> Result<HttpResponse> {
+    match sqlx::query_as::<_, WeightConfig>("SELECT * FROM weight_configs WHERE is_default = 1 LIMIT 1")
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        Ok(Some(config)) => Ok(HttpResponse::Ok().json(ApiResponse::success(config))),
+        Ok(None) => Ok(HttpResponse::NotFound().json(
+            ApiResponse::<()>::error("未找到默认权重配置".to_string())
+        )),
+        Err(e) => {
+            eprintln!("数据库查询错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("获取默认权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 获取单个权重配置
+pub async fn get_weight_config(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<i64>,
+) -> Result<HttpResponse> {
+    let config_id = path.into_inner();
+
+    match sqlx::query_as::<_, WeightConfig>("SELECT * FROM weight_configs WHERE id = ?")
+        .bind(config_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        Ok(Some(config)) => Ok(HttpResponse::Ok().json(ApiResponse::success(config))),
+        Ok(None) => Ok(HttpResponse::NotFound().json(
+            ApiResponse::<()>::error("权重配置不存在".to_string())
+        )),
+        Err(e) => {
+            eprintln!("数据库查询错误: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("获取权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 创建权重配置请求结构
+#[derive(serde::Deserialize)]
+pub struct CreateWeightConfigRequest {
+    pub config_name: String,
+    pub description: Option<String>,
+    pub cost_performance_weight: f32,
+    pub data_trend_weight: f32,
+    pub content_quality_weight: f32,
+    pub performance_weight: f32,
+    pub affinity_weight: f32,
+    pub editing_weight: f32,
+    pub video_quality_weight: f32,
+    pub is_default: Option<bool>,
+}
+
+/// 创建权重配置
+pub async fn create_weight_config(
+    pool: web::Data<SqlitePool>,
+    payload: web::Json<CreateWeightConfigRequest>,
+) -> Result<HttpResponse> {
+    let request = payload.into_inner();
+
+    // 验证权重总和
+    let primary_total = request.cost_performance_weight + request.data_trend_weight + request.content_quality_weight;
+    if (primary_total - 1.0).abs() > 0.01 {
+        return Ok(HttpResponse::BadRequest().json(
+            ApiResponse::<()>::error("一级权重总和必须为100%".to_string())
+        ));
+    }
+
+    let quality_total = request.performance_weight + request.affinity_weight + 
+                       request.editing_weight + request.video_quality_weight;
+    if (quality_total - 1.0).abs() > 0.01 {
+        return Ok(HttpResponse::BadRequest().json(
+            ApiResponse::<()>::error("内容质量权重总和必须为100%".to_string())
+        ));
+    }
+
+    // 如果设置为默认，先取消其他默认配置
+    if request.is_default.unwrap_or(false) {
+        let _ = sqlx::query("UPDATE weight_configs SET is_default = 0")
+            .execute(pool.get_ref())
+            .await;
+    }
+
+    match sqlx::query(
+        r#"
+        INSERT INTO weight_configs (
+            config_name, description, cost_performance_weight, data_trend_weight, 
+            content_quality_weight, performance_weight, affinity_weight, 
+            editing_weight, video_quality_weight, is_default, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        "#
+    )
+    .bind(&request.config_name)
+    .bind(&request.description)
+    .bind(request.cost_performance_weight)
+    .bind(request.data_trend_weight)
+    .bind(request.content_quality_weight)
+    .bind(request.performance_weight)
+    .bind(request.affinity_weight)
+    .bind(request.editing_weight)
+    .bind(request.video_quality_weight)
+    .bind(request.is_default.unwrap_or(false))
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(result) => {
+            let config_id = result.last_insert_rowid();
+            Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "id": config_id,
+                "message": "权重配置创建成功"
+            }))))
+        }
+        Err(e) => {
+            eprintln!("创建权重配置失败: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("创建权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 更新权重配置
+pub async fn update_weight_config(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<i64>,
+    payload: web::Json<CreateWeightConfigRequest>,
+) -> Result<HttpResponse> {
+    let config_id = path.into_inner();
+    let request = payload.into_inner();
+
+    // 验证权重总和
+    let primary_total = request.cost_performance_weight + request.data_trend_weight + request.content_quality_weight;
+    if (primary_total - 1.0).abs() > 0.01 {
+        return Ok(HttpResponse::BadRequest().json(
+            ApiResponse::<()>::error("一级权重总和必须为100%".to_string())
+        ));
+    }
+
+    let quality_total = request.performance_weight + request.affinity_weight + 
+                       request.editing_weight + request.video_quality_weight;
+    if (quality_total - 1.0).abs() > 0.01 {
+        return Ok(HttpResponse::BadRequest().json(
+            ApiResponse::<()>::error("内容质量权重总和必须为100%".to_string())
+        ));
+    }
+
+    // 如果设置为默认，先取消其他默认配置
+    if request.is_default.unwrap_or(false) {
+        let _ = sqlx::query("UPDATE weight_configs SET is_default = 0 WHERE id != ?")
+            .bind(config_id)
+            .execute(pool.get_ref())
+            .await;
+    }
+
+    match sqlx::query(
+        r#"
+        UPDATE weight_configs SET
+            config_name = ?, description = ?, cost_performance_weight = ?, 
+            data_trend_weight = ?, content_quality_weight = ?, performance_weight = ?, 
+            affinity_weight = ?, editing_weight = ?, video_quality_weight = ?, 
+            is_default = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        "#
+    )
+    .bind(&request.config_name)
+    .bind(&request.description)
+    .bind(request.cost_performance_weight)
+    .bind(request.data_trend_weight)
+    .bind(request.content_quality_weight)
+    .bind(request.performance_weight)
+    .bind(request.affinity_weight)
+    .bind(request.editing_weight)
+    .bind(request.video_quality_weight)
+    .bind(request.is_default.unwrap_or(false))
+    .bind(config_id)
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                Ok(HttpResponse::Ok().json(ApiResponse::success("权重配置更新成功")))
+            } else {
+                Ok(HttpResponse::NotFound().json(
+                    ApiResponse::<()>::error("权重配置不存在".to_string())
+                ))
+            }
+        }
+        Err(e) => {
+            eprintln!("更新权重配置失败: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("更新权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 删除权重配置
+pub async fn delete_weight_config(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<i64>,
+) -> Result<HttpResponse> {
+    let config_id = path.into_inner();
+
+    // 检查是否为默认配置
+    match sqlx::query_scalar::<_, bool>("SELECT is_default FROM weight_configs WHERE id = ?")
+        .bind(config_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        Ok(Some(true)) => {
+            return Ok(HttpResponse::BadRequest().json(
+                ApiResponse::<()>::error("不能删除默认权重配置".to_string())
+            ));
+        }
+        Ok(Some(false)) => {
+            // 可以删除
+        }
+        Ok(None) => {
+            return Ok(HttpResponse::NotFound().json(
+                ApiResponse::<()>::error("权重配置不存在".to_string())
+            ));
+        }
+        Err(e) => {
+            eprintln!("查询权重配置失败: {}", e);
+            return Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("查询权重配置失败".to_string())
+            ));
+        }
+    }
+
+    match sqlx::query("DELETE FROM weight_configs WHERE id = ?")
+        .bind(config_id)
+        .execute(pool.get_ref())
+        .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                Ok(HttpResponse::Ok().json(ApiResponse::success("权重配置删除成功")))
+            } else {
+                Ok(HttpResponse::NotFound().json(
+                    ApiResponse::<()>::error("权重配置不存在".to_string())
+                ))
+            }
+        }
+        Err(e) => {
+            eprintln!("删除权重配置失败: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("删除权重配置失败".to_string())
+            ))
+        }
+    }
+}
+
+/// 设置默认权重配置
+pub async fn set_default_weight_config(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<i64>,
+) -> Result<HttpResponse> {
+    let config_id = path.into_inner();
+
+    // 开始事务
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            eprintln!("开始事务失败: {}", e);
+            return Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("设置默认配置失败".to_string())
+            ));
+        }
+    };
+
+    // 取消所有默认配置
+    if let Err(e) = sqlx::query("UPDATE weight_configs SET is_default = 0")
+        .execute(&mut *tx)
+        .await
+    {
+        let _ = tx.rollback().await;
+        eprintln!("取消默认配置失败: {}", e);
+        return Ok(HttpResponse::InternalServerError().json(
+            ApiResponse::<()>::error("设置默认配置失败".to_string())
+        ));
+    }
+
+    // 设置新的默认配置
+    match sqlx::query("UPDATE weight_configs SET is_default = 1 WHERE id = ?")
+        .bind(config_id)
+        .execute(&mut *tx)
+        .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                if let Err(e) = tx.commit().await {
+                    eprintln!("提交事务失败: {}", e);
+                    return Ok(HttpResponse::InternalServerError().json(
+                        ApiResponse::<()>::error("设置默认配置失败".to_string())
+                    ));
+                }
+                Ok(HttpResponse::Ok().json(ApiResponse::success("默认权重配置设置成功")))
+            } else {
+                let _ = tx.rollback().await;
+                Ok(HttpResponse::NotFound().json(
+                    ApiResponse::<()>::error("权重配置不存在".to_string())
+                ))
+            }
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            eprintln!("设置默认配置失败: {}", e);
+            Ok(HttpResponse::InternalServerError().json(
+                ApiResponse::<()>::error("设置默认配置失败".to_string())
+            ))
+        }
+    }
+}

@@ -1,0 +1,485 @@
+use actix_web::{web, HttpResponse, Result};
+use sqlx::SqlitePool;
+use crate::models::{Doctor, DoctorImport, WeightConfig, CalculatedIndicators, ApiResponse, QueryParams, AnalysisParams};
+use crate::algorithms::{ScoringAlgorithm, AlgorithmConfig};
+use chrono::Utc;
+
+/// 获取医生列表
+pub async fn get_doctors(
+    pool: web::Data<SqlitePool>,
+    query: web::Query<QueryParams>,
+) -> Result<HttpResponse> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = (page - 1) * limit;
+
+    // 构建查询条件
+    let mut where_conditions = Vec::new();
+    let mut query_params = Vec::new();
+
+    if let Some(name) = &query.name {
+        where_conditions.push("name LIKE ?");
+        query_params.push(format!("%{}%", name));
+    }
+
+    if let Some(department) = &query.department {
+        where_conditions.push("department = ?");
+        query_params.push(department.clone());
+    }
+
+    if let Some(region) = &query.region {
+        where_conditions.push("region = ?");
+        query_params.push(region.clone());
+    }
+
+    if let Some(title) = &query.title {
+        where_conditions.push("title = ?");
+        query_params.push(title.clone());
+    }
+
+    let where_clause = if where_conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_conditions.join(" AND "))
+    };
+
+    // 排序
+    let order_by = match query.sort_by.as_deref() {
+        Some("name") => "ORDER BY name",
+        Some("created_at") => "ORDER BY created_at",
+        Some("total_followers") => "ORDER BY total_followers DESC",
+        Some("total_likes") => "ORDER BY total_likes DESC",
+        _ => "ORDER BY created_at DESC",
+    };
+
+    let sql = format!(
+        "SELECT * FROM doctors {} {} LIMIT ? OFFSET ?",
+        where_clause, order_by
+    );
+
+    // 构建查询
+    let mut query_builder = sqlx::query_as::<_, Doctor>(&sql);
+    
+    // 添加参数
+    for param in &query_params {
+        query_builder = query_builder.bind(param);
+    }
+    query_builder = query_builder.bind(limit).bind(offset);
+
+    match query_builder.fetch_all(pool.get_ref()).await {
+        Ok(doctors) => {
+            // 获取总数
+            let count_sql = format!("SELECT COUNT(*) FROM doctors {}", where_clause);
+            let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+            for param in &query_params {
+                count_query = count_query.bind(param);
+            }
+            
+            let total = count_query.fetch_one(pool.get_ref()).await.unwrap_or(0);
+
+            let response = ApiResponse::success_with_total(serde_json::json!({
+                "doctors": doctors,
+                "page": page,
+                "limit": limit
+            }), total);
+
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => {
+            eprintln!("查询医生列表失败: {}", e);
+            let response = ApiResponse::error(format!("查询失败: {}", e));
+            Ok(HttpResponse::InternalServerError().json(response))
+        }
+    }
+}
+
+/// 获取单个医生信息
+pub async fn get_doctor(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<String>,
+) -> Result<HttpResponse> {
+    let doctor_id = path.into_inner();
+
+    match sqlx::query_as::<_, Doctor>("SELECT * FROM doctors WHERE id = ?")
+        .bind(&doctor_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        Ok(Some(doctor)) => {
+            let response = ApiResponse::success(doctor);
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Ok(None) => {
+            let response = ApiResponse::error("医生不存在".to_string());
+            Ok(HttpResponse::NotFound().json(response))
+        }
+        Err(e) => {
+            eprintln!("查询医生信息失败: {}", e);
+            let response = ApiResponse::error(format!("查询失败: {}", e));
+            Ok(HttpResponse::InternalServerError().json(response))
+        }
+    }
+}
+
+/// 添加医生
+pub async fn add_doctor(
+    pool: web::Data<SqlitePool>,
+    doctor: web::Json<DoctorImport>,
+) -> Result<HttpResponse> {
+    let doctor_data = doctor.into_inner();
+    
+    // 生成医生ID
+    let doctor_id = format!("DOC{:06}", 
+        chrono::Utc::now().timestamp_millis() % 1000000
+    );
+
+    match sqlx::query(
+        r#"
+        INSERT INTO doctors (
+            id, name, title, region, department, agency_name, agency_price,
+            total_followers, total_likes, total_works,
+            likes_7d, followers_7d, shares_7d, comments_7d, works_7d,
+            likes_15d, followers_15d, shares_15d, comments_15d, works_15d,
+            likes_30d, followers_30d, shares_30d, comments_30d, works_30d,
+            performance_score, affinity_score, editing_score, video_quality_score,
+            created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        "#,
+    )
+    .bind(&doctor_id)
+    .bind(&doctor_data.name)
+    .bind(&doctor_data.title)
+    .bind(&doctor_data.region)
+    .bind(&doctor_data.department)
+    .bind(&doctor_data.agency_name)
+    .bind(doctor_data.agency_price)
+    .bind(doctor_data.total_followers)
+    .bind(doctor_data.total_likes)
+    .bind(doctor_data.total_works)
+    .bind(doctor_data.likes_7d)
+    .bind(doctor_data.followers_7d)
+    .bind(doctor_data.shares_7d)
+    .bind(doctor_data.comments_7d)
+    .bind(doctor_data.works_7d)
+    .bind(doctor_data.likes_15d)
+    .bind(doctor_data.followers_15d)
+    .bind(doctor_data.shares_15d)
+    .bind(doctor_data.comments_15d)
+    .bind(doctor_data.works_15d)
+    .bind(doctor_data.likes_30d)
+    .bind(doctor_data.followers_30d)
+    .bind(doctor_data.shares_30d)
+    .bind(doctor_data.comments_30d)
+    .bind(doctor_data.works_30d)
+    .bind(doctor_data.performance_score)
+    .bind(doctor_data.affinity_score)
+    .bind(doctor_data.editing_score)
+    .bind(doctor_data.video_quality_score)
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(_) => {
+            let response = ApiResponse::success(serde_json::json!({ "id": doctor_id }));
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(e) => {
+            eprintln!("添加医生失败: {}", e);
+            let response = ApiResponse::error(format!("添加失败: {}", e));
+            Ok(HttpResponse::InternalServerError().json(response))
+        }
+    }
+}
+
+/// 更新医生信息
+pub async fn update_doctor(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<String>,
+    doctor: web::Json<DoctorImport>,
+) -> Result<HttpResponse> {
+    let doctor_id = path.into_inner();
+    let doctor_data = doctor.into_inner();
+
+    match sqlx::query(
+        r#"
+        UPDATE doctors SET 
+            name = ?, title = ?, region = ?, department = ?, agency_name = ?, 
+            agency_price = ?, total_followers = ?, total_likes = ?, total_works = ?,
+            likes_7d = ?, followers_7d = ?, shares_7d = ?, comments_7d = ?, works_7d = ?,
+            likes_15d = ?, followers_15d = ?, shares_15d = ?, comments_15d = ?, works_15d = ?,
+            likes_30d = ?, followers_30d = ?, shares_30d = ?, comments_30d = ?, works_30d = ?,
+            performance_score = ?, affinity_score = ?, editing_score = ?, video_quality_score = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        "#,
+    )
+    .bind(&doctor_data.name)
+    .bind(&doctor_data.title)
+    .bind(&doctor_data.region)
+    .bind(&doctor_data.department)
+    .bind(&doctor_data.agency_name)
+    .bind(doctor_data.agency_price)
+    .bind(doctor_data.total_followers)
+    .bind(doctor_data.total_likes)
+    .bind(doctor_data.total_works)
+    .bind(doctor_data.likes_7d)
+    .bind(doctor_data.followers_7d)
+    .bind(doctor_data.shares_7d)
+    .bind(doctor_data.comments_7d)
+    .bind(doctor_data.works_7d)
+    .bind(doctor_data.likes_15d)
+    .bind(doctor_data.followers_15d)
+    .bind(doctor_data.shares_15d)
+    .bind(doctor_data.comments_15d)
+    .bind(doctor_data.works_15d)
+    .bind(doctor_data.likes_30d)
+    .bind(doctor_data.followers_30d)
+    .bind(doctor_data.shares_30d)
+    .bind(doctor_data.comments_30d)
+    .bind(doctor_data.works_30d)
+    .bind(doctor_data.performance_score)
+    .bind(doctor_data.affinity_score)
+    .bind(doctor_data.editing_score)
+    .bind(doctor_data.video_quality_score)
+    .bind(&doctor_id)
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                let response = ApiResponse::success("更新医生信息成功");
+                Ok(HttpResponse::Ok().json(response))
+            } else {
+                let response = ApiResponse::error("医生不存在".to_string());
+                Ok(HttpResponse::NotFound().json(response))
+            }
+        }
+        Err(e) => {
+            eprintln!("更新医生信息失败: {}", e);
+            let response = ApiResponse::error(format!("更新失败: {}", e));
+            Ok(HttpResponse::InternalServerError().json(response))
+        }
+    }
+}
+
+/// 删除医生
+pub async fn delete_doctor(
+    pool: web::Data<SqlitePool>,
+    path: web::Path<String>,
+) -> Result<HttpResponse> {
+    let doctor_id = path.into_inner();
+
+    match sqlx::query("DELETE FROM doctors WHERE id = ?")
+        .bind(&doctor_id)
+        .execute(pool.get_ref())
+        .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                let response = ApiResponse::success("删除医生成功");
+                Ok(HttpResponse::Ok().json(response))
+            } else {
+                let response = ApiResponse::error("医生不存在".to_string());
+                Ok(HttpResponse::NotFound().json(response))
+            }
+        }
+        Err(e) => {
+            eprintln!("删除医生失败: {}", e);
+            let response = ApiResponse::error(format!("删除失败: {}", e));
+            Ok(HttpResponse::InternalServerError().json(response))
+        }
+    }
+}
+
+/// 获取医生投放建议
+pub async fn get_recommendations(
+    pool: web::Data<SqlitePool>,
+    query: web::Query<AnalysisParams>,
+) -> Result<HttpResponse> {
+    // 获取权重配置
+    let weight_config = if let Some(config_id) = query.weight_config_id {
+        match sqlx::query_as::<_, WeightConfig>("SELECT * FROM weight_configs WHERE id = ?")
+            .bind(config_id)
+            .fetch_optional(pool.get_ref())
+            .await
+        {
+            Ok(Some(config)) => config,
+            Ok(None) => {
+                let response = ApiResponse::error("权重配置不存在".to_string());
+                return Ok(HttpResponse::NotFound().json(response));
+            }
+            Err(e) => {
+                eprintln!("查询权重配置失败: {}", e);
+                let response = ApiResponse::error(format!("查询失败: {}", e));
+                return Ok(HttpResponse::InternalServerError().json(response));
+            }
+        }
+    } else {
+        // 获取默认权重配置
+        match sqlx::query_as::<_, WeightConfig>("SELECT * FROM weight_configs WHERE is_default = 1 LIMIT 1")
+            .fetch_optional(pool.get_ref())
+            .await
+        {
+            Ok(Some(config)) => config,
+            Ok(None) => {
+                let response = ApiResponse::error("未找到默认权重配置".to_string());
+                return Ok(HttpResponse::NotFound().json(response));
+            }
+            Err(e) => {
+                eprintln!("查询权重配置失败: {}", e);
+                let response = ApiResponse::error(format!("查询失败: {}", e));
+                return Ok(HttpResponse::InternalServerError().json(response));
+            }
+        }
+    };
+
+    // 构建医生查询条件
+    let mut where_conditions = Vec::new();
+    let mut query_params = Vec::new();
+
+    if let Some(department) = &query.department {
+        where_conditions.push("department = ?");
+        query_params.push(department.clone());
+    }
+
+    if let Some(region) = &query.region {
+        where_conditions.push("region = ?");
+        query_params.push(region.clone());
+    }
+
+    if let Some(title) = &query.title {
+        where_conditions.push("title = ?");
+        query_params.push(title.clone());
+    }
+
+    let where_clause = if where_conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_conditions.join(" AND "))
+    };
+
+    // 获取医生列表
+    let sql = format!("SELECT * FROM doctors {}", where_clause);
+    let mut query_builder = sqlx::query_as::<_, Doctor>(&sql);
+    for param in &query_params {
+        query_builder = query_builder.bind(param);
+    }
+
+    let doctors = match query_builder.fetch_all(pool.get_ref()).await {
+        Ok(doctors) => doctors,
+        Err(e) => {
+            eprintln!("查询医生列表失败: {}", e);
+            let response = ApiResponse::error(format!("查询失败: {}", e));
+            return Ok(HttpResponse::InternalServerError().json(response));
+        }
+    };
+
+    if doctors.is_empty() {
+        let response = ApiResponse::success(serde_json::json!({
+            "recommendations": [],
+            "total": 0,
+            "summary": "没有找到符合条件的医生"
+        }));
+        return Ok(HttpResponse::Ok().json(response));
+    }
+
+    // 计算评分
+    let config = AlgorithmConfig::default();
+    let algorithm = ScoringAlgorithm::new(config);
+    
+    let mut indicators: Vec<CalculatedIndicators> = doctors.iter()
+        .map(|doctor| algorithm.calculate_full_indicators(doctor, &weight_config))
+        .collect();
+
+    // 排序
+    algorithm.rank_doctors(&mut indicators);
+
+    // 获取推荐的医生（综合评分>=60分的前20名）
+    let recommended = algorithm.get_recommended_doctors(&indicators, 60.0, 20);
+
+    // 生成评价摘要
+    let summary = algorithm.generate_evaluation_summary(&indicators);
+
+    let response = ApiResponse::success(serde_json::json!({
+        "recommendations": recommended,
+        "total": recommended.len(),
+        "summary": summary,
+        "weight_config": weight_config
+    }));
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+/// 计算医生指标
+pub async fn calculate_indicators(
+    pool: web::Data<SqlitePool>,
+    query: web::Query<AnalysisParams>,
+) -> Result<HttpResponse> {
+    // 获取权重配置
+    let weight_config_id = query.weight_config_id.unwrap_or(1);
+    let weight_config = match sqlx::query_as::<_, WeightConfig>("SELECT * FROM weight_configs WHERE id = ?")
+        .bind(weight_config_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        Ok(Some(config)) => config,
+        Ok(None) => {
+            let response = ApiResponse::error("权重配置不存在".to_string());
+            return Ok(HttpResponse::NotFound().json(response));
+        }
+        Err(e) => {
+            eprintln!("查询权重配置失败: {}", e);
+            let response = ApiResponse::error(format!("查询失败: {}", e));
+            return Ok(HttpResponse::InternalServerError().json(response));
+        }
+    };
+
+    // 获取医生列表
+    let doctors = match sqlx::query_as::<_, Doctor>("SELECT * FROM doctors")
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(doctors) => doctors,
+        Err(e) => {
+            eprintln!("查询医生列表失败: {}", e);
+            let response = ApiResponse::error(format!("查询失败: {}", e));
+            return Ok(HttpResponse::InternalServerError().json(response));
+        }
+    };
+
+    // 计算指标
+    let config = AlgorithmConfig::default();
+    let algorithm = ScoringAlgorithm::new(config);
+    let indicators = algorithm.calculate_batch_indicators(&doctors, &weight_config);
+
+    // 保存计算结果到数据库
+    for indicator in &indicators {
+        let _ = sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO calculated_indicators (
+                doctor_id, account_type, cost_performance_index, 
+                data_trend_index, content_quality_index, comprehensive_score, 
+                calculated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(&indicator.doctor_id)
+        .bind(indicator.account_type.to_string())
+        .bind(indicator.cost_performance_index)
+        .bind(indicator.data_trend_index)
+        .bind(indicator.content_quality_index)
+        .bind(indicator.comprehensive_score)
+        .bind(indicator.calculated_at)
+        .execute(pool.get_ref())
+        .await;
+    }
+
+    let summary = algorithm.generate_evaluation_summary(&indicators);
+
+    let response = ApiResponse::success(serde_json::json!({
+        "indicators": indicators,
+        "summary": summary,
+        "total": indicators.len()
+    }));
+
+    Ok(HttpResponse::Ok().json(response))
+}

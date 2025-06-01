@@ -1,0 +1,312 @@
+use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+use sqlx::FromRow;
+
+/// 医生基本信息模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct Doctor {
+    pub id: String,                    // 医生ID (主键)
+    pub name: String,                  // 姓名
+    pub title: String,                 // 职称
+    pub region: String,                // 地区
+    pub department: String,            // 科室
+    pub agency_name: Option<String>,   // 机构名称
+    pub agency_price: f64,             // 机构报价（元）
+    pub total_followers: i64,          // 总粉丝量
+    pub total_likes: i64,              // 总获赞量
+    pub total_works: i64,              // 总作品数
+    
+    // 7天数据
+    pub likes_7d: i64,                 // 7天新增点赞
+    pub followers_7d: i64,             // 7天净增粉丝
+    pub shares_7d: i64,                // 7天新增分享
+    pub comments_7d: i64,              // 7天新增评论
+    pub works_7d: i64,                 // 7天新增作品
+    
+    // 15天数据
+    pub likes_15d: i64,                // 15天新增点赞
+    pub followers_15d: i64,            // 15天净增粉丝
+    pub shares_15d: i64,               // 15天新增分享
+    pub comments_15d: i64,             // 15天新增评论
+    pub works_15d: i64,                // 15天新增作品
+    
+    // 30天数据
+    pub likes_30d: i64,                // 30天新增点赞
+    pub followers_30d: i64,            // 30天净增粉丝
+    pub shares_30d: i64,               // 30天新增分享
+    pub comments_30d: i64,             // 30天新增评论
+    pub works_30d: i64,                // 30天新增作品
+    
+    // 人工评分（0-10分）
+    pub performance_score: Option<f64>, // 医生表现力评分
+    pub affinity_score: Option<f64>,    // 医生亲和力评分
+    pub editing_score: Option<f64>,     // 剪辑水平评分
+    pub video_quality_score: Option<f64>, // 画面质量评分
+    
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+impl Default for Doctor {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            title: String::new(),
+            region: String::new(),
+            department: String::new(),
+            agency_name: None,
+            agency_price: 0.0,
+            total_followers: 0,
+            total_likes: 0,
+            total_works: 0,
+            likes_7d: 0,
+            followers_7d: 0,
+            shares_7d: 0,
+            comments_7d: 0,
+            works_7d: 0,
+            likes_15d: 0,
+            followers_15d: 0,
+            shares_15d: 0,
+            comments_15d: 0,
+            works_15d: 0,
+            likes_30d: 0,
+            followers_30d: 0,
+            shares_30d: 0,
+            comments_30d: 0,
+            works_30d: 0,
+            performance_score: None,
+            affinity_score: None,
+            editing_score: None,
+            video_quality_score: None,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+}
+
+/// 权重配置模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct WeightConfig {
+    pub id: i64,
+    pub config_name: String,               // 配置名称
+    pub description: Option<String>,       // 配置描述
+    
+    // 一级权重 (总和必须为100%)
+    pub cost_performance_weight: f32,      // 性价比权重 
+    pub data_trend_weight: f32,            // 数据趋势权重
+    pub content_quality_weight: f32,       // 内容质量权重
+    
+    // 内容质量细分权重
+    pub performance_weight: f32,           // 医生表现力权重
+    pub affinity_weight: f32,              // 医生亲和力权重
+    pub editing_weight: f32,               // 剪辑水平权重
+    pub video_quality_weight: f32,         // 画面质量权重
+    
+    pub is_default: bool,                  // 是否为默认配置
+    pub created_by: Option<String>,        // 创建人
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
+}
+
+impl Default for WeightConfig {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            config_name: "默认配置".to_string(),
+            description: Some("系统默认权重配置".to_string()),
+            cost_performance_weight: 0.4,
+            data_trend_weight: 0.3,
+            content_quality_weight: 0.3,
+            performance_weight: 0.3,
+            affinity_weight: 0.25,
+            editing_weight: 0.25,
+            video_quality_weight: 0.2,
+            is_default: true,
+            created_by: None,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+}
+
+/// 计算指标模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct CalculatedIndicators {
+    pub id: i64,
+    pub doctor_id: String,
+    
+    // 账号分类
+    pub account_type: AccountType,
+    
+    // 各项指数
+    pub cost_performance_index: f64,       // 性价比指数
+    pub data_trend_index: f64,             // 数据趋势指数
+    pub content_quality_index: f64,        // 内容质量指数
+    pub comprehensive_score: f64,          // 综合评价指数
+    
+    pub calculated_at: chrono::NaiveDateTime,
+}
+
+/// 账号性质分类枚举
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum AccountType {
+    Head,    // 头部账号
+    Middle,  // 腰部账号
+    Tail,    // 尾部账号
+}
+
+impl std::fmt::Display for AccountType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AccountType::Head => write!(f, "head"),
+            AccountType::Middle => write!(f, "middle"),
+            AccountType::Tail => write!(f, "tail"),
+        }
+    }
+}
+
+impl std::str::FromStr for AccountType {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "head" => Ok(AccountType::Head),
+            "middle" => Ok(AccountType::Middle),
+            "tail" => Ok(AccountType::Tail),
+            _ => Err(format!("未知的账号类型: {}", s)),
+        }
+    }
+}
+
+/// 医生导入数据模型
+#[derive(Debug, Deserialize)]
+pub struct DoctorImport {
+    #[serde(alias = "姓名")]
+    pub name: String,
+    #[serde(alias = "职称")]
+    pub title: String,
+    #[serde(alias = "地区")]
+    pub region: String,
+    #[serde(alias = "科室")]
+    pub department: String,
+    #[serde(alias = "机构名称")]
+    pub agency_name: Option<String>,
+    #[serde(alias = "机构报价")]
+    pub agency_price: f64,
+    
+    #[serde(alias = "总粉丝量")]
+    pub total_followers: i64,
+    #[serde(alias = "总获赞量")]
+    pub total_likes: i64,
+    #[serde(alias = "总作品数")]
+    pub total_works: i64,
+    
+    // 7天数据
+    #[serde(alias = "7天新增点赞")]
+    pub likes_7d: i64,
+    #[serde(alias = "7天净增粉丝")]
+    pub followers_7d: i64,
+    #[serde(alias = "7天新增分享")]
+    pub shares_7d: i64,
+    #[serde(alias = "7天新增评论")]
+    pub comments_7d: i64,
+    #[serde(alias = "7天新增作品")]
+    pub works_7d: i64,
+    
+    // 15天数据
+    #[serde(alias = "15天新增点赞")]
+    pub likes_15d: i64,
+    #[serde(alias = "15天净增粉丝")]
+    pub followers_15d: i64,
+    #[serde(alias = "15天新增分享")]
+    pub shares_15d: i64,
+    #[serde(alias = "15天新增评论")]
+    pub comments_15d: i64,
+    #[serde(alias = "15天新增作品")]
+    pub works_15d: i64,
+    
+    // 30天数据
+    #[serde(alias = "30天新增点赞")]
+    pub likes_30d: i64,
+    #[serde(alias = "30天净增粉丝")]
+    pub followers_30d: i64,
+    #[serde(alias = "30天新增分享")]
+    pub shares_30d: i64,
+    #[serde(alias = "30天新增评论")]
+    pub comments_30d: i64,
+    #[serde(alias = "30天新增作品")]
+    pub works_30d: i64,
+    
+    // 人工评分（可选）
+    #[serde(alias = "医生表现力评分")]
+    pub performance_score: Option<f64>,
+    #[serde(alias = "医生亲和力评分")]
+    pub affinity_score: Option<f64>,
+    #[serde(alias = "剪辑水平评分")]
+    pub editing_score: Option<f64>,
+    #[serde(alias = "画面质量评分")]
+    pub video_quality_score: Option<f64>,
+}
+
+/// API响应包装器
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub message: String,
+    pub total: Option<i64>,
+}
+
+impl<T> ApiResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            message: "操作成功".to_string(),
+            total: None,
+        }
+    }
+
+    pub fn success_with_total(data: T, total: i64) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            message: "操作成功".to_string(),
+            total: Some(total),
+        }
+    }
+
+    pub fn error(message: String) -> Self {
+        Self {
+            success: false,
+            data: None,
+            message,
+            total: None,
+        }
+    }
+}
+
+/// 查询参数
+#[derive(Debug, Deserialize)]
+pub struct QueryParams {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    pub name: Option<String>,
+    pub department: Option<String>,
+    pub region: Option<String>,
+    pub title: Option<String>,
+    pub min_score: Option<f64>,
+    pub max_score: Option<f64>,
+    pub sort_by: Option<String>,
+    pub sort_order: Option<String>,
+}
+
+/// 分析参数
+#[derive(Debug, Deserialize)]
+pub struct AnalysisParams {
+    pub weight_config_id: Option<i64>,
+    pub department: Option<String>,
+    pub region: Option<String>,
+    pub title: Option<String>,
+}

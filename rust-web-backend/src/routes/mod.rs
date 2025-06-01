@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use crate::handlers::{doctors, scores, weights};
+use crate::handlers::{doctors, scores, weights, import, reports};
 
 /// 配置所有路由
 /// 
@@ -15,10 +15,18 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                     .route("/{id}", web::get().to(doctors::get_doctor))
                     .route("/{id}", web::put().to(doctors::update_doctor))
                     .route("/{id}", web::delete().to(doctors::delete_doctor))
+                    .route("/import", web::post().to(doctors::import_csv))
+                    .route("/export", web::get().to(doctors::export_csv))
+                    .route("/statistics", web::get().to(doctors::get_statistics))
             )
             .service(
                 web::scope("/scores")
                     .route("", web::get().to(scores::get_scores))
+                    .route("/calculate", web::post().to(scores::calculate_scores))
+                    .route("/ranking", web::get().to(scores::get_ranking))
+                    .route("/comparison", web::post().to(scores::compare_doctors))
+                    .route("/trends/{doctor_id}", web::get().to(scores::get_score_trends))
+                    .route("/recommendations", web::get().to(scores::get_recommendations))
                     .route("/statistics", web::get().to(scores::get_score_statistics))
                     .route("/doctor/{id}", web::get().to(scores::get_doctor_score))
             )
@@ -29,6 +37,19 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                     .route("/active", web::get().to(weights::get_active_weight_config))
                     .route("/{id}/activate", web::post().to(weights::activate_weight_config))
                     .route("/validate", web::post().to(weights::validate_weight_config))
+            )
+            .service(
+                web::scope("/import")
+                    .route("/template", web::get().to(import::get_import_template))
+                    .route("/validate", web::post().to(import::validate_import_data))
+                    .route("/doctors", web::post().to(import::import_doctors))
+            )
+            .service(
+                web::scope("/reports")
+                    .route("/overview", web::post().to(reports::generate_overview_report))
+                    .route("/ranking", web::post().to(reports::generate_ranking_report))
+                    .route("/analysis", web::post().to(reports::generate_analysis_report))
+                    .route("/export/csv", web::post().to(reports::export_report_csv))
             )
             .route("/health", web::get().to(health_check))
     );

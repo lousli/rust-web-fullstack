@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据导入 - 医生投放分析系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .import-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .import-tabs {
+            display: flex;
+            border-bottom: 2px solid #e1e5e9;
+            margin-bottom: 30px;
+        }
+        
+        .import-tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+        
+        .import-tab.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+        }
+        
+        .import-panel {
+            display: none;
+        }
+        
+        .import-panel.active {
+            display: block;
+        }
+        
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        
+        .upload-area.drag-over {
+            border-color: #007bff;
+            background-color: #e3f2fd;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            color: #6c757d;
+            margin-bottom: 15px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+        
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        
+        .import-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .option-group {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .option-group h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+        
+        .checkbox-group {
+            margin-bottom: 15px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .field-mapping {
+            margin-top: 20px;
+        }
+        
+        .mapping-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        
+        .mapping-row select {
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+        
+        .template-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            margin-bottom: 20px;
+        }
+        
+        .template-download {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .preview-table th,
+        .preview-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .preview-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .import-result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        
+        .import-result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .import-result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .error-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        
+        .error-item {
+            padding: 8px;
+            background: rgba(255,255,255,0.5);
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="index.html">📊 医生投放分析系统</a>
+        </div>
+        <div class="nav-menu">
+            <a href="index.html">首页</a>
+            <a href="doctors.html">医生管理</a>
+            <a href="analysis.html">数据分析</a>
+            <a href="import.html" class="active">数据导入</a>
+            <a href="reports.html">报告生成</a>
+        </div>
+    </nav>
+
+    <div class="import-container">
+        <h1>📥 数据导入</h1>
+        
+        <!-- 导入方式选择 -->
+        <div class="import-tabs">
+            <button class="import-tab active" data-tab="csv">CSV 文件导入</button>
+            <button class="import-tab" data-tab="json">JSON 数据导入</button>
+            <button class="import-tab" data-tab="template">下载模板</button>
+        </div>
+
+        <!-- CSV 导入面板 -->
+        <div class="import-panel active" id="csv-panel">
+            <div class="template-section">
+                <h3>📋 CSV 导入说明</h3>
+                <p>支持导入医生基本信息、粉丝数据、价格信息等。请确保 CSV 文件包含必要的字段。</p>
+                <button class="template-download" onclick="downloadTemplate('csv')">下载 CSV 模板</button>
+                <button class="template-download" onclick="viewTemplate()">查看字段说明</button>
+            </div>
+
+            <!-- 文件上传区域 -->
+            <div class="upload-area" id="csv-upload-area">
+                <div class="upload-icon">📁</div>
+                <h3>拖拽 CSV 文件到此处，或点击选择文件</h3>
+                <p>支持 .csv 格式，最大 10MB</p>
+                <button class="upload-btn" onclick="document.getElementById('csv-file-input').click()">选择文件</button>
+                <input type="file" id="csv-file-input" class="file-input" accept=".csv" onchange="handleFileSelect(event, 'csv')">
+            </div>
+
+            <!-- 导入选项 -->
+            <div class="import-options">
+                <div class="option-group">
+                    <h3>导入选项</h3>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="csv-overwrite" checked>
+                        <label for="csv-overwrite">覆盖现有数据</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="csv-validate" checked>
+                        <label for="csv-validate">导入前验证数据</label>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <h3>字段映射</h3>
+                    <div id="csv-field-mapping" class="field-mapping">
+                        <!-- 动态生成字段映射 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 预览和导入按钮 -->
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn btn-secondary" onclick="previewData('csv')" disabled id="csv-preview-btn">预览数据</button>
+                <button class="btn btn-primary" onclick="importData('csv')" disabled id="csv-import-btn">开始导入</button>
+            </div>
+        </div>
+
+        <!-- JSON 导入面板 -->
+        <div class="import-panel" id="json-panel">
+            <div class="template-section">
+                <h3>📄 JSON 导入说明</h3>
+                <p>支持标准 JSON 格式的医生数据数组。数据结构需要符合系统要求。</p>
+                <button class="template-download" onclick="downloadTemplate('json')">下载 JSON 模板</button>
+            </div>
+
+            <div class="upload-area" id="json-upload-area">
+                <div class="upload-icon">📄</div>
+                <h3>拖拽 JSON 文件到此处，或点击选择文件</h3>
+                <p>支持 .json 格式，最大 10MB</p>
+                <button class="upload-btn" onclick="document.getElementById('json-file-input').click()">选择文件</button>
+                <input type="file" id="json-file-input" class="file-input" accept=".json" onchange="handleFileSelect(event, 'json')">
+            </div>
+
+            <div class="import-options">
+                <div class="option-group">
+                    <h3>导入选项</h3>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="json-overwrite" checked>
+                        <label for="json-overwrite">覆盖现有数据</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="json-validate" checked>
+                        <label for="json-validate">导入前验证数据</label>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn btn-secondary" onclick="previewData('json')" disabled id="json-preview-btn">预览数据</button>
+                <button class="btn btn-primary" onclick="importData('json')" disabled id="json-import-btn">开始导入</button>
+            </div>
+        </div>
+
+        <!-- 模板下载面板 -->
+        <div class="import-panel" id="template-panel">
+            <div class="template-section">
+                <h3>📥 下载导入模板</h3>
+                <p>下载标准模板文件，填写数据后导入系统。</p>
+                
+                <div style="margin: 20px 0;">
+                    <button class="template-download" onclick="downloadTemplate('csv')">📊 下载 CSV 模板</button>
+                    <button class="template-download" onclick="downloadTemplate('json')">📄 下载 JSON 模板</button>
+                    <button class="template-download" onclick="downloadTemplate('excel')">📋 下载 Excel 模板</button>
+                </div>
+            </div>
+
+            <div class="template-section">
+                <h3>📝 字段说明</h3>
+                <div id="field-descriptions"></div>
+            </div>
+        </div>
+
+        <!-- 数据预览 -->
+        <div id="data-preview" style="display: none;">
+            <h3>📋 数据预览</h3>
+            <table class="preview-table" id="preview-table">
+                <!-- 动态生成预览表格 -->
+            </table>
+        </div>
+
+        <!-- 导入进度 -->
+        <div id="import-progress" style="display: none;">
+            <h3>⏳ 导入进度</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <p id="progress-text">准备导入...</p>
+        </div>
+
+        <!-- 导入结果 -->
+        <div id="import-result" class="import-result" style="display: none;">
+            <!-- 动态显示导入结果 -->
+        </div>
+    </div>
+
+    <script src="common.js"></script>
+    <script>
+        let currentFile = null;
+        let currentFormat = 'csv';
+        let fieldMapping = {};
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            setupTabs();
+            setupDragAndDrop();
+            loadFieldDescriptions();
+        });
+
+        // 设置标签页切换
+        function setupTabs() {
+            const tabs = document.querySelectorAll('.import-tab');
+            const panels = document.querySelectorAll('.import-panel');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    const targetTab = this.dataset.tab;
+                    
+                    tabs.forEach(t => t.classList.remove('active'));
+                    panels.forEach(p => p.classList.remove('active'));
+                    
+                    this.classList.add('active');
+                    document.getElementById(targetTab + '-panel').classList.add('active');
+                    
+                    currentFormat = targetTab;
+                });
+            });
+        }
+
+        // 设置拖拽上传
+        function setupDragAndDrop() {
+            ['csv', 'json'].forEach(format => {
+                const uploadArea = document.getElementById(format + '-upload-area');
+                
+                uploadArea.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    this.classList.add('drag-over');
+                });
+                
+                uploadArea.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    this.classList.remove('drag-over');
+                });
+                
+                uploadArea.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    this.classList.remove('drag-over');
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        handleFileSelect({ target: { files: files } }, format);
+                    }
+                });
+            });
+        }
+
+        // 文件选择处理
+        function handleFileSelect(event, format) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 验证文件类型
+            const validTypes = {
+                'csv': ['.csv', 'text/csv'],
+                'json': ['.json', 'application/json']
+            };
+
+            const fileType = file.type || file.name.split('.').pop();
+            if (!validTypes[format].some(type => fileType.includes(type) || file.name.endsWith(type))) {
+                showError(`请选择有效的 ${format.toUpperCase()} 文件`);
+                return;
+            }
+
+            // 验证文件大小
+            if (file.size > 10 * 1024 * 1024) {
+                showError('文件大小不能超过 10MB');
+                return;
+            }
+
+            currentFile = file;
+            
+            // 更新UI
+            document.getElementById(format + '-preview-btn').disabled = false;
+            document.getElementById(format + '-import-btn').disabled = false;
+            
+            // 显示文件信息
+            const uploadArea = document.getElementById(format + '-upload-area');
+            uploadArea.querySelector('h3').textContent = `已选择: ${file.name}`;
+            uploadArea.querySelector('p').textContent = `文件大小: ${formatFileSize(file.size)}`;
+
+            // 如果是CSV，生成字段映射
+            if (format === 'csv') {
+                generateFieldMapping(file);
+            }
+        }
+
+        // 生成字段映射
+        async function generateFieldMapping(file) {
+            try {
+                const text = await file.text();
+                const lines = text.split('\n');
+                if (lines.length > 0) {
+                    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                    createFieldMappingUI(headers);
+                }
+            } catch (error) {
+                console.error('读取文件失败:', error);
+            }
+        }
+
+        // 创建字段映射UI
+        function createFieldMappingUI(fileHeaders) {
+            const mappingContainer = document.getElementById('csv-field-mapping');
+            mappingContainer.innerHTML = '';
+
+            const systemFields = [
+                'id', 'name', 'title', 'region', 'department', 'institution',
+                'institution_price', 'list_price', 'total_fans', 'total_likes',
+                'total_works', 'likes_7d', 'fans_15d', 'shares_30d', 'comments_30d',
+                'works_7d', 'performance_score', 'editing_score', 'visual_score'
+            ];
+
+            systemFields.forEach(field => {
+                const row = document.createElement('div');
+                row.className = 'mapping-row';
+                
+                const label = document.createElement('label');
+                label.textContent = getFieldDisplayName(field);
+                
+                const select = document.createElement('select');
+                select.id = `mapping-${field}`;
+                
+                const emptyOption = document.createElement('option');
+                emptyOption.value = '';
+                emptyOption.textContent = '-- 请选择 --';
+                select.appendChild(emptyOption);
+                
+                fileHeaders.forEach(header => {
+                    const option = document.createElement('option');
+                    option.value = header;
+                    option.textContent = header;
+                    if (header.toLowerCase() === field.toLowerCase() || 
+                        header.toLowerCase().includes(field.toLowerCase())) {
+                        option.selected = true;
+                        fieldMapping[field] = header;
+                    }
+                    select.appendChild(option);
+                });
+                
+                select.addEventListener('change', function() {
+                    if (this.value) {
+                        fieldMapping[field] = this.value;
+                    } else {
+                        delete fieldMapping[field];
+                    }
+                });
+                
+                row.appendChild(label);
+                row.appendChild(select);
+                mappingContainer.appendChild(row);
+            });
+        }
+
+        // 获取字段显示名称
+        function getFieldDisplayName(field) {
+            const names = {
+                'id': '医生ID *',
+                'name': '姓名 *',
+                'title': '职称 *',
+                'region': '地区 *',
+                'department': '科室 *',
+                'institution': '机构名称',
+                'institution_price': '机构报价 *',
+                'list_price': '刊例价',
+                'total_fans': '总粉丝量 *',
+                'total_likes': '总获赞量 *',
+                'total_works': '总作品数 *',
+                'likes_7d': '7天新增点赞 *',
+                'fans_15d': '15天净增粉丝 *',
+                'shares_30d': '30天新增分享 *',
+                'comments_30d': '30天新增评论 *',
+                'works_7d': '7天新增作品 *',
+                'performance_score': '表现力评分 *',
+                'editing_score': '剪辑水平评分 *',
+                'visual_score': '画面质量评分 *'
+            };
+            return names[field] || field;
+        }
+
+        // 预览数据
+        async function previewData(format) {
+            if (!currentFile) {
+                showError('请先选择文件');
+                return;
+            }
+
+            showLoading('正在预览数据...');
+
+            try {
+                const formData = new FormData();
+                const fileContent = await currentFile.text();
+                
+                const requestData = {
+                    data: fileContent,
+                    format: format,
+                    mapping: format === 'csv' ? fieldMapping : null,
+                    overwrite: false
+                };
+
+                const response = await fetch('/api/import/validate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const result = await response.json();
+                hideLoading();
+
+                if (result.valid) {
+                    displayPreview(result.preview);
+                    showSuccess('数据验证通过，可以开始导入');
+                } else {
+                    showError('数据验证失败：' + result.message);
+                    displayErrors(result.errors);
+                }
+            } catch (error) {
+                hideLoading();
+                showError('预览失败: ' + error.message);
+            }
+        }
+
+        // 导入数据
+        async function importData(format) {
+            if (!currentFile) {
+                showError('请先选择文件');
+                return;
+            }
+
+            // 如果启用验证，先验证数据
+            const validateCheckbox = document.getElementById(format + '-validate');
+            if (validateCheckbox.checked) {
+                await previewData(format);
+                
+                if (!confirm('确认要导入这些数据吗？')) {
+                    return;
+                }
+            }
+
+            showProgress();
+
+            try {
+                const fileContent = await currentFile.text();
+                const overwriteCheckbox = document.getElementById(format + '-overwrite');
+                
+                const requestData = {
+                    data: fileContent,
+                    format: format,
+                    mapping: format === 'csv' ? fieldMapping : null,
+                    overwrite: overwriteCheckbox.checked
+                };
+
+                const response = await fetch('/api/import/doctors', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const result = await response.json();
+                hideProgress();
+
+                if (result.success) {
+                    showImportResult(result, 'success');
+                    
+                    // 清理状态
+                    setTimeout(() => {
+                        resetImportForm(format);
+                    }, 3000);
+                } else {
+                    showImportResult(result, 'error');
+                }
+            } catch (error) {
+                hideProgress();
+                showError('导入失败: ' + error.message);
+            }
+        }
+
+        // 显示预览
+        function displayPreview(previewData) {
+            if (!previewData || previewData.length === 0) {
+                document.getElementById('data-preview').style.display = 'none';
+                return;
+            }
+
+            const table = document.getElementById('preview-table');
+            table.innerHTML = '';
+
+            // 创建表头
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            
+            const headers = ['姓名', '职称', '地区', '科室', '粉丝数', '获赞数', '综合评分'];
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // 创建表体
+            const tbody = document.createElement('tbody');
+            previewData.forEach(doctor => {
+                const row = document.createElement('tr');
+                [
+                    doctor.name,
+                    doctor.title,
+                    doctor.region,
+                    doctor.department,
+                    doctor.total_fans.toLocaleString(),
+                    doctor.total_likes.toLocaleString(),
+                    '待计算'
+                ].forEach(value => {
+                    const td = document.createElement('td');
+                    td.textContent = value;
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+
+            document.getElementById('data-preview').style.display = 'block';
+        }
+
+        // 显示导入结果
+        function showImportResult(result, type) {
+            const resultDiv = document.getElementById('import-result');
+            resultDiv.className = `import-result ${type}`;
+            resultDiv.style.display = 'block';
+
+            let html = `
+                <h3>${type === 'success' ? '✅ 导入成功' : '❌ 导入失败'}</h3>
+                <p>${result.message}</p>
+                <div>
+                    <strong>总记录数:</strong> ${result.total_rows || 0}<br>
+                    <strong>成功导入:</strong> ${result.success_count || 0}<br>
+                    <strong>失败记录:</strong> ${result.error_count || 0}
+                </div>
+            `;
+
+            if (result.errors && result.errors.length > 0) {
+                html += '<div class="error-list"><h4>错误详情:</h4>';
+                result.errors.slice(0, 10).forEach(error => {
+                    html += `<div class="error-item">第 ${error.row} 行，字段 ${error.field}: ${error.error}</div>`;
+                });
+                if (result.errors.length > 10) {
+                    html += `<div class="error-item">... 还有 ${result.errors.length - 10} 个错误</div>`;
+                }
+                html += '</div>';
+            }
+
+            resultDiv.innerHTML = html;
+        }
+
+        // 重置导入表单
+        function resetImportForm(format) {
+            currentFile = null;
+            document.getElementById(format + '-file-input').value = '';
+            document.getElementById(format + '-preview-btn').disabled = true;
+            document.getElementById(format + '-import-btn').disabled = true;
+            
+            const uploadArea = document.getElementById(format + '-upload-area');
+            uploadArea.querySelector('h3').textContent = `拖拽 ${format.toUpperCase()} 文件到此处，或点击选择文件`;
+            uploadArea.querySelector('p').textContent = `支持 .${format} 格式，最大 10MB`;
+            
+            document.getElementById('data-preview').style.display = 'none';
+            document.getElementById('import-result').style.display = 'none';
+        }
+
+        // 下载模板
+        async function downloadTemplate(type) {
+            try {
+                if (type === 'csv' || type === 'json') {
+                    const response = await fetch('/api/import/template');
+                    const template = await response.json();
+                    
+                    if (type === 'csv') {
+                        downloadCSVTemplate(template);
+                    } else {
+                        downloadJSONTemplate(template);
+                    }
+                } else if (type === 'excel') {
+                    // Excel 模板功能可以后续添加
+                    showError('Excel 模板功能即将推出');
+                }
+            } catch (error) {
+                showError('下载模板失败: ' + error.message);
+            }
+        }
+
+        // 下载 CSV 模板
+        function downloadCSVTemplate(template) {
+            let csvContent = template.csv_headers.join(',') + '\n';
+            csvContent += template.sample_data.join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'doctor_import_template.csv';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 下载 JSON 模板
+        function downloadJSONTemplate(template) {
+            // 基于样本数据创建 JSON 模板
+            const sampleData = template.sample_data[0].split(',');
+            const headers = template.csv_headers;
+            
+            const jsonData = [{
+                id: sampleData[0] || "DOC001",
+                name: sampleData[1] || "张医生",
+                title: sampleData[2] || "主任医师",
+                region: sampleData[3] || "北京",
+                department: sampleData[4] || "内科",
+                institution: sampleData[5] || "北京医院",
+                institution_price: parseInt(sampleData[6]) || 50000,
+                list_price: parseInt(sampleData[7]) || 60000,
+                total_fans: parseInt(sampleData[8]) || 10000,
+                total_likes: parseInt(sampleData[9]) || 5000,
+                total_works: parseInt(sampleData[10]) || 100,
+                likes_7d: parseInt(sampleData[11]) || 500,
+                fans_15d: parseInt(sampleData[12]) || 200,
+                shares_30d: parseInt(sampleData[13]) || 300,
+                comments_30d: parseInt(sampleData[14]) || 150,
+                works_7d: parseInt(sampleData[15]) || 10,
+                performance_score: parseFloat(sampleData[16]) || 85.5,
+                editing_score: parseFloat(sampleData[17]) || 78.2,
+                visual_score: parseFloat(sampleData[18]) || 90.1
+            }];
+            
+            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'doctor_import_template.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 查看模板
+        function viewTemplate() {
+            loadFieldDescriptions();
+            document.querySelector('[data-tab="template"]').click();
+        }
+
+        // 加载字段说明
+        async function loadFieldDescriptions() {
+            try {
+                const response = await fetch('/api/import/template');
+                const template = await response.json();
+                
+                const container = document.getElementById('field-descriptions');
+                container.innerHTML = '';
+                
+                const table = document.createElement('table');
+                table.className = 'preview-table';
+                table.style.fontSize = '14px';
+                
+                const thead = document.createElement('thead');
+                thead.innerHTML = '<tr><th>字段名</th><th>说明</th><th>必填</th></tr>';
+                table.appendChild(thead);
+                
+                const tbody = document.createElement('tbody');
+                Object.entries(template.field_descriptions).forEach(([field, description]) => {
+                    const isRequired = description.includes('必填');
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><code>${field}</code></td>
+                        <td>${description}</td>
+                        <td>${isRequired ? '✅' : '❌'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                table.appendChild(tbody);
+                
+                container.appendChild(table);
+            } catch (error) {
+                console.error('加载字段说明失败:', error);
+            }
+        }
+
+        // 显示进度
+        function showProgress() {
+            document.getElementById('import-progress').style.display = 'block';
+            let progress = 0;
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 90) {
+                    progress = 90;
+                }
+                progressFill.style.width = progress + '%';
+                progressText.textContent = `正在导入数据... ${Math.round(progress)}%`;
+            }, 200);
+            
+            // 保存 interval 以便稍后清理
+            window.importInterval = interval;
+        }
+
+        // 隐藏进度
+        function hideProgress() {
+            if (window.importInterval) {
+                clearInterval(window.importInterval);
+            }
+            
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            progressFill.style.width = '100%';
+            progressText.textContent = '导入完成！';
+            
+            setTimeout(() => {
+                document.getElementById('import-progress').style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 1000);
+        }
+
+        // 工具函数
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showLoading(message) {
+            // 可以添加全局加载指示器
+            console.log('Loading:', message);
+        }
+
+        function hideLoading() {
+            // 隐藏全局加载指示器
+            console.log('Loading hidden');
+        }
+
+        function showError(message) {
+            alert('错误: ' + message);
+        }
+
+        function showSuccess(message) {
+            alert('成功: ' + message);
+        }
+    </script>
+</body>
+</html>
