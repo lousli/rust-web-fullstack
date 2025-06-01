@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API测试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        button { padding: 8px 16px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>医生数据分析系统 - API 测试</h1>
+    
+    <div class="test-section">
+        <h2>健康检查</h2>
+        <button onclick="testHealth()">测试健康检查</button>
+        <pre id="health-result"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>医生数据</h2>
+        <button onclick="testDoctors()">获取医生列表</button>
+        <pre id="doctors-result"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>评分数据</h2>
+        <button onclick="testScores()">获取评分数据</button>
+        <pre id="scores-result"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>统计数据</h2>
+        <button onclick="testStatistics()">获取统计数据</button>
+        <pre id="statistics-result"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>权重配置</h2>
+        <button onclick="testWeights()">获取权重配置</button>
+        <pre id="weights-result"></pre>
+    </div>
+
+    <script>
+        async function testAPI(url, elementId) {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                document.getElementById(elementId).textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById(elementId).textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function testHealth() {
+            testAPI('/api/health', 'health-result');
+        }
+
+        function testDoctors() {
+            testAPI('/api/doctors', 'doctors-result');
+        }
+
+        function testScores() {
+            testAPI('/api/scores', 'scores-result');
+        }
+
+        function testStatistics() {
+            testAPI('/api/scores/statistics', 'statistics-result');
+        }
+
+        function testWeights() {
+            testAPI('/api/weight-configs/active', 'weights-result');
+        }
+    </script>
+</body>
+</html>
