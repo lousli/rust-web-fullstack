@@ -1,5 +1,6 @@
-use actix_web::{web, HttpResponse};
-use crate::handlers::{doctors, scores, weights, import, reports};
+use actix_web::web;
+use crate::handlers::{doctors, scores, weights, import, reports, medical_scoring};
+use crate::monitoring;
 
 /// 配置所有路由
 /// 
@@ -37,12 +38,22 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                     .route("/active", web::get().to(weights::get_active_weight_config))
                     .route("/{id}/activate", web::post().to(weights::activate_weight_config))
                     .route("/validate", web::post().to(weights::validate_weight_config))
+                    // 医疗专用权重配置API
+                    .route("/medical/presets", web::get().to(weights::get_medical_weight_presets))
+                    .route("/medical", web::post().to(weights::create_medical_weight_config))
+                    .route("/medical/analyze", web::post().to(weights::analyze_weight_impact))
+            )
+            .service(
+                web::scope("/medical-scoring")
+                    .route("/recalculate", web::post().to(medical_scoring::recalculate_medical_scores))
+                    .route("/doctor/{id}", web::get().to(medical_scoring::get_doctor_medical_score))
+                    .route("/details/{id}", web::get().to(medical_scoring::get_medical_score_details))
             )
             .service(
                 web::scope("/import")
                     .route("/template", web::get().to(import::get_import_template))
-                    .route("/validate", web::post().to(import::validate_import_data))
-                    .route("/doctors", web::post().to(import::import_doctors))
+                    // .route("/validate", web::post().to(import::validate_import_data))
+                    // .route("/doctors", web::post().to(import::import_doctors))
             )
             .service(
                 web::scope("/reports")
@@ -51,15 +62,16 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                     .route("/analysis", web::post().to(reports::generate_analysis_report))
                     .route("/export/csv", web::post().to(reports::export_report_csv))
             )
-            .route("/health", web::get().to(health_check))
+            // 监控和健康检查端点
+            .service(
+                web::scope("/monitoring")
+                    .route("/health", web::get().to(monitoring::health_check))
+                    .route("/health/detailed", web::get().to(monitoring::detailed_health_check))
+                    .route("/metrics", web::get().to(monitoring::system_metrics))
+                    .route("/readiness", web::get().to(monitoring::readiness_check))
+                    .route("/liveness", web::get().to(monitoring::liveness_check))
+            )
+            // 保持原有的简单健康检查端点以保持向后兼容
+            .route("/health", web::get().to(monitoring::health_check))
     );
-}
-
-/// 健康检查端点
-async fn health_check() -> HttpResponse {
-    HttpResponse::Ok().json(serde_json::json!({
-        "status": "ok",
-        "message": "医生数据分析系统运行正常",
-        "timestamp": chrono::Utc::now()
-    }))
 }

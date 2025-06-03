@@ -6,3 +6,4 @@ pub mod scores;
 pub mod weights;
 pub mod import;
 pub mod reports;
+pub mod medical_scoring;

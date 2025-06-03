@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医疗权重配置 - 医生投放分析系统</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/medical-weights.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 医疗权重配置主界面 -->
+        <div class="medical-weights-container">
+            <!-- 页面头部 -->
+            <header class="page-header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <h1>
+                            <i class="fas fa-balance-scale"></i>
+                            医疗权重配置
+                        </h1>
+                        <p class="subtitle">五大核心评价指标权重配置与分析</p>
+                    </div>
+                    <div class="header-right">
+                        <button class="btn btn-outline" onclick="window.history.back()">
+                            <i class="fas fa-arrow-left"></i>
+                            返回主页
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- 主内容区域 -->
+            <main class="main-content">
+                <!-- 权重配置界面将由 JavaScript 动态生成 -->
+                <div id="medical-weights-content" class="medical-weights-content">
+                    <!-- 内容由 medical-weights.js 渲染 -->
+                </div>
+            </main>
+        </div>
+
+        <!-- 提示消息容器 -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- 加载指示器 -->
+        <div id="loading-indicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>处理中...</p>
+        </div>
+    </div>
+
+    <!-- 引入脚本 -->
+    <script>
+        // 简单的 Toast 通知系统
+        class Toast {
+            static show(message, type = 'info', duration = 3000) {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = `toast toast-${type}`;
+                toast.innerHTML = `
+                    <div class="toast-content">
+                        <i class="fas fa-${this.getIcon(type)}"></i>
+                        <span>${message}</span>
+                    </div>
+                    <button class="toast-close" onclick="this.parentElement.remove()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                container.appendChild(toast);
+
+                // 自动移除
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, duration);
+            }
+
+            static getIcon(type) {
+                const icons = {
+                    success: 'check-circle',
+                    error: 'exclamation-circle',
+                    warning: 'exclamation-triangle',
+                    info: 'info-circle'
+                };
+                return icons[type] || 'info-circle';
+            }
+        }
+
+        // 简单的加载指示器
+        class Loading {
+            static show() {
+                document.getElementById('loading-indicator').style.display = 'flex';
+            }
+
+            static hide() {
+                document.getElementById('loading-indicator').style.display = 'none';
+            }
+        }
+
+        // 模拟应用对象，为了兼容 medical-weights.js
+        window.app = {
+            showNotification: (message, type) => Toast.show(message, type),
+            showLoading: (show = true) => show ? Loading.show() : Loading.hide(),
+            api: {
+                // 医疗权重预设方案
+                getMedicalWeightPresets: async () => {
+                    const response = await fetch('/api/weight-configs/medical/presets');
+                    return await response.json();
+                },
+                
+                // 创建医疗权重配置
+                createMedicalWeightConfig: async (config) => {
+                    const response = await fetch('/api/weight-configs/medical', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(config)
+                    });
+                    return await response.json();
+                },
+                  // 权重影响分析
+                analyzeMedicalWeightImpact: async (weights) => {
+                    const response = await fetch('/api/weight-configs/medical/analyze', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(weights)
+                    });
+                    return await response.json();
+                },
+                
+                // 重新计算医疗评分
+                recalculateMedicalScores: async () => {
+                    const response = await fetch('/api/medical-scoring/recalculate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    return await response.json();
+                }
+            }
+        };
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // 创建医疗权重管理器实例
+                const medicalWeights = new MedicalWeightsModule();
+                
+                // 初始化
+                await medicalWeights.init();
+                
+                // 将实例挂载到全局，方便调试和其他模块使用
+                window.medicalWeights = medicalWeights;
+                
+                console.log('医疗权重配置页面初始化完成');
+            } catch (error) {
+                console.error('初始化失败:', error);
+                Toast.show('页面初始化失败，请刷新重试', 'error');
+            }
+        });
+    </script>
+    <script src="scripts/medical-weights.js"></script>
+</body>
+</html>

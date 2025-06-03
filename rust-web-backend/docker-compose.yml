@@ -1,0 +1,74 @@
+# 医生投放评价系统 - Docker Compose 配置
+version: '3.8'
+
+services:
+  # 主应用服务
+  doctor-analysis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doctor-analysis-app
+    ports:
+      - "8081:8081"
+    environment:
+      - RUST_LOG=info
+      - RUST_WEB_PORT=8081
+      - RUST_WEB_HOST=0.0.0.0
+      - DATABASE_URL=sqlite:./data/doctor_analysis.db
+      - HEALTH_CHECK_ENABLED=true
+      - METRICS_ENABLED=true
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 可选：Nginx 反向代理（生产环境推荐）
+  nginx:
+    image: nginx:alpine
+    container_name: doctor-analysis-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - doctor-analysis
+    restart: unless-stopped
+    profiles:
+      - production
+
+  # 可选：监控服务（Prometheus）
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: doctor-analysis-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    depends_on:
+      - doctor-analysis
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  app_data:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  default:
+    name: doctor-analysis-network

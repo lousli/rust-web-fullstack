@@ -133,8 +133,7 @@ pub async fn get_import_template() -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().json(ApiResponse::success(template)))
 }
 
-/// 处理CSV数据导入（预留用于批量数据导入功能）
-#[allow(dead_code)]
+/// 处理CSV数据导入
 pub async fn import_csv_data(
     pool: web::Data<SqlitePool>,
     request: web::Json<ImportRequest>,
@@ -203,8 +202,7 @@ pub async fn import_csv_data(
     Ok(HttpResponse::Ok().json(ApiResponse::success(status)))
 }
 
-/// 从CSV记录解析医生数据（支持函数，用于数据导入）
-#[allow(dead_code)]
+/// 从CSV记录解析医生数据
 fn parse_doctor_from_csv(
     headers: &csv::StringRecord,
     record: &csv::StringRecord,
@@ -244,22 +242,10 @@ fn parse_doctor_from_csv(
     let title = get_field_value("title");
     let region = get_field_value("region");
     let department = get_field_value("department");
-    let agency_name = get_field_value("agency_name");    // 解析 agency_price
-    let agency_price = get_field_value("agency_price").and_then(|value| {
-        match value.parse::<f64>() {
-            Ok(price) if price >= 0.0 => Some(price),
-            _ => {
-                errors.push(ImportError {
-                    row: row_index + 1,
-                    field: "agency_price".to_string(),
-                    value,
-                    error: "必须是非负数字".to_string(),
-                });
-                None
-            }
-        }
-    });    // 辅助函数：解析 i32 字段
-    let parse_i32_field = |field_name: &str, errors: &mut Vec<ImportError>| -> Option<i32> {
+    let agency_name = get_field_value("agency_name");
+
+    // 解析数字字段
+    let parse_i32_field = |field_name: &str| -> Option<i32> {
         get_field_value(field_name).and_then(|value| {
             match value.parse::<i32>() {
                 Ok(num) if num >= 0 => Some(num),
@@ -276,8 +262,7 @@ fn parse_doctor_from_csv(
         })
     };
 
-    // 辅助函数：解析 f64 字段
-    let parse_f64_field = |field_name: &str, errors: &mut Vec<ImportError>| -> Option<f64> {
+    let parse_f64_field = |field_name: &str| -> Option<f64> {
         get_field_value(field_name).and_then(|value| {
             match value.parse::<f64>() {
                 Ok(num) if (0.0..=100.0).contains(&num) => Some(num),
@@ -301,32 +286,51 @@ fn parse_doctor_from_csv(
                 }
             }
         })
-    };    let total_followers = parse_i32_field("total_followers", &mut errors).unwrap_or(0);
-    let total_likes = parse_i32_field("total_likes", &mut errors).unwrap_or(0);
-    let total_works = parse_i32_field("total_works", &mut errors).unwrap_or(0);
+    };
+
+    let agency_price = get_field_value("agency_price").and_then(|value| {
+        match value.parse::<f64>() {
+            Ok(price) if price >= 0.0 => Some(price),
+            _ => {
+                errors.push(ImportError {
+                    row: row_index + 1,
+                    field: "agency_price".to_string(),
+                    value,
+                    error: "必须是非负数字".to_string(),
+                });
+                None
+            }
+        }
+    });
+
+    let total_followers = parse_i32_field("total_followers").unwrap_or(0);
+    let total_likes = parse_i32_field("total_likes").unwrap_or(0);
+    let total_works = parse_i32_field("total_works").unwrap_or(0);
 
     // 解析时间段数据
-    let likes_7d = parse_i32_field("likes_7d", &mut errors);
-    let followers_7d = parse_i32_field("followers_7d", &mut errors);
-    let shares_7d = parse_i32_field("shares_7d", &mut errors);
-    let comments_7d = parse_i32_field("comments_7d", &mut errors);
-    let works_7d = parse_i32_field("works_7d", &mut errors);
+    let likes_7d = parse_i32_field("likes_7d");
+    let followers_7d = parse_i32_field("followers_7d");
+    let shares_7d = parse_i32_field("shares_7d");
+    let comments_7d = parse_i32_field("comments_7d");
+    let works_7d = parse_i32_field("works_7d");
 
-    let likes_15d = parse_i32_field("likes_15d", &mut errors);
-    let followers_15d = parse_i32_field("followers_15d", &mut errors);
-    let shares_15d = parse_i32_field("shares_15d", &mut errors);
-    let comments_15d = parse_i32_field("comments_15d", &mut errors);
-    let works_15d = parse_i32_field("works_15d", &mut errors);    let likes_30d = parse_i32_field("likes_30d", &mut errors);
-    let followers_30d = parse_i32_field("followers_30d", &mut errors);
-    let shares_30d = parse_i32_field("shares_30d", &mut errors);
-    let comments_30d = parse_i32_field("comments_30d", &mut errors);
-    let works_30d = parse_i32_field("works_30d", &mut errors);
+    let likes_15d = parse_i32_field("likes_15d");
+    let followers_15d = parse_i32_field("followers_15d");
+    let shares_15d = parse_i32_field("shares_15d");
+    let comments_15d = parse_i32_field("comments_15d");
+    let works_15d = parse_i32_field("works_15d");
+
+    let likes_30d = parse_i32_field("likes_30d");
+    let followers_30d = parse_i32_field("followers_30d");
+    let shares_30d = parse_i32_field("shares_30d");
+    let comments_30d = parse_i32_field("comments_30d");
+    let works_30d = parse_i32_field("works_30d");
 
     // 解析人工评分
-    let performance_score = parse_f64_field("performance_score", &mut errors);
-    let affinity_score = parse_f64_field("affinity_score", &mut errors);
-    let editing_score = parse_f64_field("editing_score", &mut errors);
-    let video_quality_score = parse_f64_field("video_quality_score", &mut errors);
+    let performance_score = parse_f64_field("performance_score");
+    let affinity_score = parse_f64_field("affinity_score");
+    let editing_score = parse_f64_field("editing_score");
+    let video_quality_score = parse_f64_field("video_quality_score");
 
     if errors.is_empty() {
         let doctor = Doctor {
@@ -368,8 +372,7 @@ fn parse_doctor_from_csv(
     }
 }
 
-/// 保存医生数据到数据库（支持函数，用于数据导入）
-#[allow(dead_code)]
+/// 保存医生数据到数据库
 async fn save_doctor_to_db(
     pool: &SqlitePool,
     doctor: &Doctor,

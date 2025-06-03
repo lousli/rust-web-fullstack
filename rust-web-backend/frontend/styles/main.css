@@ -140,6 +140,19 @@ body {
     text-align: center;
 }
 
+/* 外部链接样式 */
+.nav-item[target="_blank"] {
+    position: relative;
+}
+
+.nav-item[target="_blank"]:hover .fa-external-link-alt {
+    opacity: 1 !important;
+}
+
+.nav-item .fa-external-link-alt {
+    transition: opacity 0.2s ease;
+}
+
 /* 主内容区域 */
 .main-content {
     flex: 1;
@@ -877,12 +890,13 @@ body {
     .view-actions {
         flex-direction: column;
     }
-    
-    .modal {
+      .modal {
         width: 95%;
         margin: var(--spacing-md);
     }
-}{
+}
+
+* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;

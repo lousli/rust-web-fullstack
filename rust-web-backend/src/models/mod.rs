@@ -2,6 +2,38 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use chrono::{DateTime, Utc};
 
+/// 账号类型枚举
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum AccountType {
+    #[serde(rename = "head")]
+    Head,   // 头部账号
+    #[serde(rename = "middle")]
+    Middle, // 腰部账号
+    #[serde(rename = "tail")]
+    Tail,   // 尾部账号
+}
+
+impl AccountType {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AccountType::Head => "head",
+            AccountType::Middle => "middle", 
+            AccountType::Tail => "tail",
+        }
+    }
+    
+    #[allow(dead_code)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "head" => Some(AccountType::Head),
+            "middle" => Some(AccountType::Middle),
+            "tail" => Some(AccountType::Tail),
+            _ => None,
+        }
+    }
+}
+
 /// 统一API响应格式
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
@@ -53,6 +85,34 @@ pub struct Doctor {
     pub total_followers: i32,
     pub total_likes: i32,
     pub total_works: i32,
+    
+    // 7天数据
+    pub likes_7d: Option<i32>,
+    pub followers_7d: Option<i32>,
+    pub shares_7d: Option<i32>,
+    pub comments_7d: Option<i32>,
+    pub works_7d: Option<i32>,
+    
+    // 15天数据
+    pub likes_15d: Option<i32>,
+    pub followers_15d: Option<i32>,
+    pub shares_15d: Option<i32>,
+    pub comments_15d: Option<i32>,
+    pub works_15d: Option<i32>,
+    
+    // 30天数据
+    pub likes_30d: Option<i32>,
+    pub followers_30d: Option<i32>,
+    pub shares_30d: Option<i32>,
+    pub comments_30d: Option<i32>,
+    pub works_30d: Option<i32>,
+    
+    // 人工评分
+    pub performance_score: Option<f64>,
+    pub affinity_score: Option<f64>,
+    pub editing_score: Option<f64>,
+    pub video_quality_score: Option<f64>,
+    
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
 }
@@ -109,20 +169,20 @@ pub struct CalculatedIndicators {
     
     // 账号性质分类
     pub account_type: String,               // head/middle/tail
-    pub account_type_score: f32,            // 账号性质评分 (0-100)
+    pub account_type_score: f64,            // 账号性质评分 (0-100)
     
     // 性价比指数
-    pub cost_effectiveness_index: f32,      // 性价比指数 (0-100)
+    pub cost_performance_index: f64,        // 性价比指数 (0-100)
     
     // 数据指数
-    pub data_trend_index: f32,              // 数据趋势指数 (0-100)
-    pub growth_stability_index: f32,        // 增长稳定性指数 (0-100)
+    pub data_trend_index: f64,              // 数据趋势指数 (0-100)
+    pub growth_stability_index: f64,        // 增长稳定性指数 (0-100)
     
     // 内容质量指数
-    pub content_quality_index: f32,         // 内容质量指数 (0-100)
+    pub content_quality_index: f64,         // 内容质量指数 (0-100)
     
     // 综合指数
-    pub comprehensive_index: f32,           // 综合评价指数 (0-100)
+    pub comprehensive_score: f64,           // 综合评价指数 (0-100)
     
     pub calculated_at: Option<DateTime<Utc>>,
     pub weight_config_id: Option<i32>,
@@ -131,23 +191,16 @@ pub struct CalculatedIndicators {
 /// 权重配置模型
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 pub struct WeightConfig {
-    pub id: Option<i32>,
+    pub id: Option<i64>, // SQLite INTEGER PRIMARY KEY返回i64
     pub name: String,
     pub description: Option<String>,
-    
-    // 各项指标权重 (总和为100)
-    pub account_type_weight: f32,
-    pub cost_effectiveness_weight: f32,
-    pub data_trend_weight: f32,
-    pub performance_weight: f32,
-    pub affinity_weight: f32,
-    pub editing_weight: f32,
-    pub video_quality_weight: f32,
-    
-    pub is_default: bool,
-    pub created_by: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub influence_weight: f64, // SQLite REAL返回f64
+    pub activity_weight: f64,
+    pub quality_weight: f64,
+    pub price_weight: f64,
+    pub is_default: Option<i64>, // SQLite INTEGER，可能为NULL
+    pub created_at: Option<chrono::NaiveDateTime>, // SQLite DATETIME
+    pub updated_at: Option<chrono::NaiveDateTime>, // SQLite DATETIME
 }
 
 /// 系统配置模型
@@ -160,8 +213,9 @@ pub struct SystemConfig {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-/// 医生导入数据模型
+/// 医生导入数据模型（保留用于数据导入功能扩展）
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct DoctorImport {
     #[serde(alias = "姓名")]
     pub name: String,
@@ -230,7 +284,7 @@ pub struct DoctorImport {
 }
 
 /// 医生完整信息 DTO
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct DoctorDetailDto {
     #[serde(flatten)]
     pub doctor: Doctor,
@@ -276,48 +330,16 @@ pub struct DoctorListResponse {
 pub struct DoctorQueryParams {
     pub page: Option<i32>,
     pub page_size: Option<i32>,
+    pub search: Option<String>,
     pub region: Option<String>,
     pub department: Option<String>,
-    pub account_type: Option<String>,
-    pub min_score: Option<f32>,
-    pub max_score: Option<f32>,
     pub sort_by: Option<String>,
     pub sort_order: Option<String>,
-    pub search: Option<String>,
 }
 
-/// 账号类型枚举
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum AccountType {
-    #[serde(rename = "head")]
-    Head,    // 头部账号
-    #[serde(rename = "middle")]
-    Middle,  // 腰部账号
-    #[serde(rename = "tail")]
-    Tail,    // 尾部账号
-}
-
-impl AccountType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            AccountType::Head => "head",
-            AccountType::Middle => "middle",
-            AccountType::Tail => "tail",
-        }
-    }
-    
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "head" => Some(AccountType::Head),
-            "middle" => Some(AccountType::Middle),
-            "tail" => Some(AccountType::Tail),
-            _ => None,
-        }
-    }
-}
-
-/// 分析参数 (保持向后兼容)
+/// 分析参数 (保持向后兼容，用于复杂查询功能扩展)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct AnalysisParams {
     pub sort_by: Option<String>,
     pub order: Option<String>,
@@ -329,11 +351,13 @@ pub struct AnalysisParams {
     pub title: Option<String>,
 }
 
-/// 查询参数模型
+/// 查询参数模型（保留用于高级查询功能扩展）
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct QueryParams {
     pub sort_by: Option<String>,
     pub order: Option<String>,
+    pub sort_order: Option<String>,
     pub page: Option<i32>,
     pub page_size: Option<i32>,
     pub weight_config_id: Option<i32>,
@@ -379,17 +403,87 @@ impl Default for WeightConfig {
             id: None,
             name: "默认配置".to_string(),
             description: Some("系统默认权重配置".to_string()),
-            account_type_weight: 25.0,
-            cost_effectiveness_weight: 30.0,
-            data_trend_weight: 25.0,
-            performance_weight: 6.0,
-            affinity_weight: 5.0,
-            editing_weight: 5.0,
-            video_quality_weight: 4.0,
-            is_default: true,
-            created_by: Some("system".to_string()),
+            influence_weight: 0.3,
+            activity_weight: 0.25,
+            quality_weight: 0.25,
+            price_weight: 0.2,
+            is_default: Some(1),
             created_at: None,
             updated_at: None,
+        }
+    }
+}
+
+/// 报告数据结构
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DoctorReportData {
+    pub doctor: Doctor,
+    pub comprehensive_score: f64,
+    pub cost_efficiency: f64,
+    pub scores: ScoreComponents,
+}
+
+/// 报告过滤条件（保留用于报告功能扩展）
+#[derive(Debug, Deserialize, Clone, Default)]
+#[allow(dead_code)]
+pub struct ReportFilters {
+    pub region: Option<String>,
+    pub department: Option<String>,
+    pub account_type: Option<String>,
+    pub min_score: Option<f64>,
+    pub max_score: Option<f64>,
+    pub price_range: Option<(f64, f64)>,
+}
+
+/// 评分组件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreComponents {
+    pub account_type_score: f64,
+    pub cost_performance_score: f64,
+    pub data_trend_score: f64,
+    pub content_quality_score: f64,
+    pub comprehensive_score: f64,
+}
+
+/// 医疗权重配置模型 - 五大核心评价指标
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct MedicalWeightConfig {
+    pub id: Option<i32>,
+    pub name: String,
+    pub description: Option<String>,
+    
+    // 五大核心评价指标权重 (总和为100)
+    pub account_influence_weight: f32,      // 账号影响力权重 (22%)
+    pub cost_effectiveness_weight: f32,     // 性价比权重 (35%)
+    pub content_quality_weight: f32,        // 内容质量权重 (28%)
+    pub medical_credibility_weight: f32,    // 医疗可信度权重 (10%)
+    pub roi_prediction_weight: f32,         // ROI预测权重 (5%)
+    
+    // 配置策略类型
+    pub strategy_type: Option<String>,      // Conservative, Aggressive, Balanced, BrandFocused
+    
+    pub is_default: bool,
+    pub created_by: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+impl Default for MedicalWeightConfig {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: "默认医疗权重配置".to_string(),
+            description: Some("医疗投放的默认权重配置".to_string()),
+            account_influence_weight: 22.0,
+            cost_effectiveness_weight: 35.0,
+            content_quality_weight: 28.0,
+            medical_credibility_weight: 10.0,
+            roi_prediction_weight: 5.0,
+            strategy_type: Some("Balanced".to_string()),
+            is_default: true,
+            created_by: Some("system".to_string()),
+            created_at: Some(Utc::now()),
+            updated_at: Some(Utc::now()),
         }
     }
 }

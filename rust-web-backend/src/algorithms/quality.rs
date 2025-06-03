@@ -1,10 +1,13 @@
 use crate::models::Doctor;
 
 /// 内容质量分析算法
+/// 内容质量分析器（保留用于高级内容质量分析功能扩展）
+#[allow(dead_code)]
 pub struct ContentQualityAnalyzer;
 
 impl ContentQualityAnalyzer {
-    /// 计算内容质量指数
+    /// 计算内容质量指数（预留用于高级内容质量分析）
+    #[allow(dead_code)]
     pub fn calculate_content_quality_index(
         performance_score: Option<f64>,
         affinity_score: Option<f64>,
@@ -50,9 +53,8 @@ impl ContentQualityAnalyzer {
             .sum();
         
         weighted_sum * 10.0 // 10分制转100分制
-    }
-
-    /// 分析医生内容质量的详细评分
+    }    /// 分析医生内容质量的详细评分（预留用于高级内容质量分析）
+    #[allow(dead_code)]
     pub fn analyze_content_quality(doctor: &Doctor) -> ContentQualityReport {
         let performance_score = doctor.performance_score.unwrap_or(0.0);
         let affinity_score = doctor.affinity_score.unwrap_or(0.0);
@@ -75,9 +77,8 @@ impl ContentQualityAnalyzer {
             strengths: Self::identify_strengths(doctor),
             improvements: Self::identify_improvements(doctor),
         }
-    }
-
-    /// 识别内容质量优势
+    }    /// 识别内容质量优势（预留用于内容优势分析）
+    #[allow(dead_code)]
     fn identify_strengths(doctor: &Doctor) -> Vec<String> {
         let mut strengths = Vec::new();
         
@@ -106,9 +107,8 @@ impl ContentQualityAnalyzer {
         }
         
         strengths
-    }
-
-    /// 识别需要改进的方面
+    }    /// 识别需要改进的方面（预留用于改进建议分析）
+    #[allow(dead_code)]
     fn identify_improvements(doctor: &Doctor) -> Vec<String> {
         let mut improvements = Vec::new();
         
@@ -137,9 +137,8 @@ impl ContentQualityAnalyzer {
         }
         
         improvements
-    }
-
-    /// 根据内容质量给出投放建议
+    }    /// 根据内容质量给出投放建议（预留用于投放建议功能）
+    #[allow(dead_code)]
     pub fn get_investment_advice(quality_index: f64) -> String {
         match quality_index {
             score if score >= 80.0 => "内容质量优秀，强烈推荐投放".to_string(),
@@ -152,7 +151,9 @@ impl ContentQualityAnalyzer {
 }
 
 /// 内容质量分析报告
+/// 内容质量报告（保留用于内容质量分析功能扩展）
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ContentQualityReport {
     pub performance_score: f64,    // 表现力评分
     pub affinity_score: f64,       // 亲和力评分
@@ -168,33 +169,32 @@ mod tests {
     use super::*;
     use crate::models::Doctor;
 
-    fn create_test_doctor() -> Doctor {
-        Doctor {
+    fn create_test_doctor() -> Doctor {        Doctor {
             id: "TEST001".to_string(),
             name: "测试医生".to_string(),
-            title: "主治医师".to_string(),
-            region: "北京".to_string(),
-            department: "内科".to_string(),
+            title: Some("主治医师".to_string()),
+            region: Some("北京".to_string()),
+            department: Some("内科".to_string()),
             agency_name: Some("测试机构".to_string()),
-            agency_price: 5000.0,
+            agency_price: Some(5000.0),
             total_followers: 100000,
             total_likes: 50000,
             total_works: 100,
-            likes_7d: 1000,
-            followers_7d: 100,
-            shares_7d: 50,
-            comments_7d: 200,
-            works_7d: 5,
-            likes_15d: 2000,
-            followers_15d: 200,
-            shares_15d: 100,
-            comments_15d: 400,
-            works_15d: 10,
-            likes_30d: 3000,
-            followers_30d: 300,
-            shares_30d: 150,
-            comments_30d: 600,
-            works_30d: 15,
+            likes_7d: Some(1000),
+            followers_7d: Some(100),
+            shares_7d: Some(50),
+            comments_7d: Some(200),
+            works_7d: Some(5),
+            likes_15d: Some(2000),
+            followers_15d: Some(200),
+            shares_15d: Some(100),
+            comments_15d: Some(400),
+            works_15d: Some(10),
+            likes_30d: Some(3000),
+            followers_30d: Some(300),
+            shares_30d: Some(150),
+            comments_30d: Some(600),
+            works_30d: Some(15),
             performance_score: Some(8.0),
             affinity_score: Some(7.5),
             editing_score: Some(8.5),

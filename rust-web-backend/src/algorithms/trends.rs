@@ -1,4 +1,4 @@
-use crate::models::Doctor;
+use crate::models::DoctorMetrics;
 
 /// 数据趋势分析算法
 pub struct DataTrendAnalyzer;
@@ -70,14 +70,12 @@ impl DataTrendAnalyzer {
         } else {
             (avg_efficiency.ln() * 20.0 + 50.0).min(100.0).max(0.0)
         }
-    }
-
-    /// 计算增长稳定性指数
-    pub fn calculate_growth_stability_index(doctor: &Doctor) -> f64 {
+    }    /// 计算增长稳定性指数
+    pub fn calculate_growth_stability_index(metrics: &DoctorMetrics) -> f64 {
         let periods = vec![
-            (doctor.likes_7d as f64, 7.0),
-            (doctor.likes_15d as f64, 15.0),
-            (doctor.likes_30d as f64, 30.0),
+            (metrics.likes_7d as f64, 7.0),
+            (metrics.likes_15d as f64, 15.0),
+            (metrics.likes_30d as f64, 30.0),
         ];
 
         // 计算各周期的日均增长率
@@ -96,24 +94,20 @@ impl DataTrendAnalyzer {
             .sum::<f64>() / daily_rates.len() as f64;
 
         // 稳定性评分：方差越小，稳定性越高
-        let stability = if variance == 0.0 {
+        if variance == 0.0 {
             100.0
         } else {
             (100.0 / (1.0 + variance.sqrt())).min(100.0)
-        };
-
-        stability
-    }
-
-    /// 综合分析医生数据趋势
-    pub fn analyze_doctor_trends(doctor: &Doctor) -> (f64, f64) {
+        }
+    }    /// 综合分析医生数据趋势
+    pub fn analyze_doctor_trends(metrics: &DoctorMetrics) -> (f64, f64) {
         let trend_index = Self::calculate_data_trend_index(
-            doctor.likes_7d, doctor.likes_15d, doctor.likes_30d,
-            doctor.followers_7d, doctor.followers_15d, doctor.followers_30d,
-            doctor.works_7d, doctor.works_15d, doctor.works_30d,
+            metrics.likes_7d as i64, metrics.likes_15d as i64, metrics.likes_30d as i64,
+            metrics.followers_7d as i64, metrics.followers_15d as i64, metrics.followers_30d as i64,
+            metrics.works_7d as i64, metrics.works_15d as i64, metrics.works_30d as i64,
         );
 
-        let stability_index = Self::calculate_growth_stability_index(doctor);
+        let stability_index = Self::calculate_growth_stability_index(metrics);
 
         (trend_index, stability_index)
     }
@@ -122,20 +116,46 @@ impl DataTrendAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::Doctor;
-
-    fn create_test_doctor() -> Doctor {
+    use crate::models::Doctor;    fn create_test_doctor() -> Doctor {
         Doctor {
             id: "TEST001".to_string(),
             name: "测试医生".to_string(),
-            title: "主治医师".to_string(),
-            region: "北京".to_string(),
-            department: "内科".to_string(),
+            title: Some("主治医师".to_string()),
+            region: Some("北京".to_string()),
+            department: Some("内科".to_string()),
             agency_name: Some("测试机构".to_string()),
-            agency_price: 5000.0,
+            agency_price: Some(5000.0),
             total_followers: 100000,
             total_likes: 50000,
             total_works: 100,
+            likes_7d: Some(1000),
+            followers_7d: Some(100),
+            shares_7d: Some(50),
+            comments_7d: Some(200),
+            works_7d: Some(5),
+            likes_15d: Some(2000),
+            followers_15d: Some(200),
+            shares_15d: Some(100),
+            comments_15d: Some(400),
+            works_15d: Some(10),
+            likes_30d: Some(3000),
+            followers_30d: Some(300),
+            shares_30d: Some(150),
+            comments_30d: Some(600),
+            works_30d: Some(15),
+            performance_score: Some(8.0),
+            affinity_score: Some(7.5),
+            editing_score: Some(8.5),
+            video_quality_score: Some(8.0),
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    fn create_test_metrics() -> DoctorMetrics {
+        DoctorMetrics {
+            id: None,
+            doctor_id: "TEST001".to_string(),
             likes_7d: 1000,
             followers_7d: 100,
             shares_7d: 50,
@@ -151,19 +171,12 @@ mod tests {
             shares_30d: 150,
             comments_30d: 600,
             works_30d: 15,
-            performance_score: Some(8.0),
-            affinity_score: Some(7.5),
-            editing_score: Some(8.5),
-            video_quality_score: Some(8.0),
-            created_at: None,
-            updated_at: None,
+            recorded_at: None,
         }
-    }
-
-    #[test]
+    }    #[test]
     fn test_data_trend_calculation() {
-        let doctor = create_test_doctor();
-        let (trend_index, stability_index) = DataTrendAnalyzer::analyze_doctor_trends(&doctor);
+        let metrics = create_test_metrics();
+        let (trend_index, stability_index) = DataTrendAnalyzer::analyze_doctor_trends(&metrics);
         
         assert!(trend_index >= 0.0 && trend_index <= 100.0);
         assert!(stability_index >= 0.0 && stability_index <= 100.0);

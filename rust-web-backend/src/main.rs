@@ -11,12 +11,23 @@ mod handlers;
 mod models;
 mod database;
 mod algorithms;
+mod config;
+mod monitoring;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    // 初始化监控启动时间
+    monitoring::init_start_time();
+    
+    // 初始化配置
+    config::init_config().expect("Failed to initialize config");
+    let config = config::get_config();
+    
+    // 初始化日志
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or(&config.logging.level));
     
     println!("🚀 启动医生数据分析系统后端服务器...");
+    config.print_summary();
     
     // 初始化数据库
     println!("📊 初始化数据库连接...");
@@ -31,13 +42,13 @@ async fn main() -> std::io::Result<()> {
         }
     };
     
-    println!("📊 本地访问: http://127.0.0.1:8080");
-    println!("📱 手机访问: http://0.0.0.0:8080 (使用你的电脑IP地址)");
-    println!("🔗 API 文档: http://127.0.0.1:8080/api");
+    println!("📊 本地访问: http://127.0.0.1:{}", config.server.port);
+    println!("📱 手机访问: http://0.0.0.0:{} (使用你的电脑IP地址)", config.server.port);
+    println!("🔗 API 文档: http://127.0.0.1:{}/api", config.server.port);
     
     // 获取本机IP地址提示
     if let Ok(local_ip) = local_ip_address::local_ip() {
-        println!("🌐 建议手机访问地址: http://{}:8080", local_ip);
+        println!("🌐 建议手机访问地址: http://{}:{}", local_ip, config.server.port);
     }
 
     HttpServer::new(move || {
@@ -56,7 +67,8 @@ async fn main() -> std::io::Result<()> {
             // 提供静态文件服务，映射 / 前缀到 frontend 目录
             .service(Files::new("/", "./frontend").index_file("index.html"))
     })
-    .bind(("0.0.0.0", 8080))?
+    .workers(config.server.worker_threads)
+    .bind(&config.bind_address())?
     .run()
     .await
 }

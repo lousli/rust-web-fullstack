@@ -1,8 +1,10 @@
 use sqlx::{SqlitePool, migrate::MigrateDatabase, Sqlite};
 use anyhow::Result;
+use crate::config;
 
 pub async fn setup_database() -> Result<SqlitePool> {
-    let database_url = "sqlite:./doctors.db";
+    let config = config::get_config();
+    let database_url = &config.database.url;
     
     // 如果数据库不存在，创建它
     if !Sqlite::database_exists(database_url).await.unwrap_or(false) {
@@ -148,6 +150,63 @@ async fn create_tables(pool: &SqlitePool) -> Result<()> {
             description TEXT,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
+        "#,    )
+    .execute(pool)
+    .await?;
+
+    // 创建医疗权重配置表
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS medical_weight_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            
+            -- 五大核心评价指标权重 (总和为100)
+            account_influence_weight REAL NOT NULL DEFAULT 22.0,
+            cost_effectiveness_weight REAL NOT NULL DEFAULT 35.0,
+            content_quality_weight REAL NOT NULL DEFAULT 28.0,
+            medical_credibility_weight REAL NOT NULL DEFAULT 10.0,
+            roi_prediction_weight REAL NOT NULL DEFAULT 5.0,
+            
+            -- 配置策略类型
+            strategy_type TEXT CHECK(strategy_type IN ('Conservative', 'Aggressive', 'Balanced', 'BrandFocused')),
+              -- 配置元数据
+            is_default BOOLEAN NOT NULL DEFAULT FALSE,
+            created_by TEXT DEFAULT 'system',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // 创建医疗计算指标表
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS medical_calculated_indicators (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doctor_id TEXT NOT NULL,
+            weight_config_id INTEGER NOT NULL,
+            
+            -- 五大核心评价指标评分
+            account_influence_score REAL NOT NULL,     -- 账号影响力评分
+            cost_effectiveness_score REAL NOT NULL,    -- 性价比评分
+            content_quality_score REAL NOT NULL,       -- 内容质量评分
+            medical_credibility_score REAL NOT NULL,   -- 医疗可信度评分
+            roi_prediction_score REAL NOT NULL,        -- ROI预测评分
+            
+            -- 综合评分
+            comprehensive_score REAL NOT NULL,
+            
+            -- 计算时间
+            calculated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            
+            FOREIGN KEY (doctor_id) REFERENCES doctors(id),
+            FOREIGN KEY (weight_config_id) REFERENCES medical_weight_configs(id),
+            UNIQUE(doctor_id, weight_config_id)
+        )
         "#,
     )
     .execute(pool)
@@ -249,7 +308,7 @@ async fn insert_default_weights(pool: &SqlitePool) -> Result<()> {
             ("trend_weight_15d", "0.3", "15天数据权重"),
             ("trend_weight_30d", "0.2", "30天数据权重"),
         ];
-
+        
         for (key, value, desc) in system_configs {
             sqlx::query(
                 "INSERT OR IGNORE INTO system_configs (config_key, config_value, description) VALUES (?, ?, ?)"
@@ -259,7 +318,68 @@ async fn insert_default_weights(pool: &SqlitePool) -> Result<()> {
             .bind(desc)
             .execute(pool)
             .await?;
-        }        println!("默认权重配置创建成功");
+        }
+        
+        println!("默认权重配置创建成功");
+    }
+
+    // 初始化医疗权重配置
+    insert_default_medical_weights(pool).await?;
+
+    Ok(())
+}
+
+async fn insert_default_medical_weights(pool: &SqlitePool) -> Result<()> {
+    // 检查是否已有医疗权重配置
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM medical_weight_configs")
+        .fetch_one(pool)
+        .await?;
+
+    if count.0 == 0 {
+        // 插入默认医疗权重配置方案
+        let medical_configs = vec![
+            (
+                "平衡型配置", "各指标权重相对均衡，适合综合考量的投放场景",
+                22.0, 35.0, 28.0, 10.0, 5.0, "Balanced", true
+            ),
+            (
+                "保守型配置", "重视性价比和专业可信度，适合新合作医生",
+                20.0, 40.0, 25.0, 12.0, 3.0, "Conservative", false
+            ),
+            (
+                "积极型配置", "重视影响力和ROI预测，适合效果导向的投放",
+                30.0, 25.0, 30.0, 8.0, 7.0, "Aggressive", false
+            ),
+            (
+                "品牌型配置", "重视内容质量和医疗可信度，适合品牌建设",
+                18.0, 20.0, 35.0, 22.0, 5.0, "BrandFocused", false
+            ),
+        ];
+
+        for (name, desc, account_influence, cost_effectiveness, content_quality, 
+             medical_credibility, roi_prediction, strategy, is_default) in medical_configs {
+            sqlx::query(
+                r#"
+                INSERT INTO medical_weight_configs (
+                    name, description,
+                    account_influence_weight, cost_effectiveness_weight, content_quality_weight,
+                    medical_credibility_weight, roi_prediction_weight,
+                    strategy_type, is_default, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'system')
+                "#,
+            )
+            .bind(name)
+            .bind(desc)
+            .bind(account_influence)
+            .bind(cost_effectiveness)
+            .bind(content_quality)
+            .bind(medical_credibility)
+            .bind(roi_prediction)
+            .bind(strategy)
+            .bind(is_default)
+            .execute(pool)
+            .await?;
+        }        println!("默认医疗权重配置创建成功");
     }
 
     Ok(())
